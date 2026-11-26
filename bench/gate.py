@@ -32,6 +32,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .config import CONFIG_DIR
+
 SUITES = [
     "nist_strd",
     "mgh",
@@ -41,7 +43,6 @@ SUITES = [
     "stringer2019_gratings",
 ]
 GATE_DIR = Path("data/gate")
-CONFIG_DIR = Path(__file__).resolve().parent / "configs"
 BUDGETS = [1.0, 5.0, 10.0, 25.0]
 RANK_BUDGETS = [10.0, 100.0]
 MAIN_MS = 5.0
@@ -53,7 +54,7 @@ TIERS = {
     "test": ("test", SUITES, 150),
 }
 RANK_CURVES = {"sagefit_spb": None, "stringer2019_gratings": 100}  # None = all curves
-FITTER = ("symbfitrs", "rs_auto")  # record labels; rs_auto = runs before the rename
+FITTER = "symbfitrs"  # the fitter's label in records
 BASELINE = "baseline"
 
 
@@ -162,12 +163,23 @@ def build(results: Path = Path("results"), out: Path = GATE_DIR, seed: int = 0) 
         print(f"{tier:5s}: {n_cases} cases, {len(probs)} problems, {len(used)} tapes")
 
 
-def score_gate(records: Path, budgets: list[float] = BUDGETS) -> pd.DataFrame:
-    """Per-fit success and time-to-target under the case's own suite rule."""
+RULE_COLS = ["ref_loss", "ref_mode", "gate_mode", "gate_target", "gate_floor"]
+
+
+def score_gate(
+    records: Path, budgets: list[float] = BUDGETS, rules: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Per-fit success and time-to-target under the case's own suite rule.
+
+    ``rules`` (RULE_COLS indexed by problem) replaces the reference and rule stored in the
+    records, so an earlier run is judged by the same targets as the current one.
+    """
     from .report import load_records
     from .scoring import score
 
     _, fits, _ = load_records(records)
+    if rules is not None:
+        fits = fits.drop(columns=RULE_COLS, errors="ignore").join(rules, on="problem")
     parts = []
     for (mode, target, floor), g in fits.groupby(["gate_mode", "gate_target", "gate_floor"]):
         scored = score(g, budgets, [target], mode, floor)
@@ -230,7 +242,10 @@ def run(tier: str, baseline: Path | None = None, out: Path | None = None) -> Non
     bench(problems, out, budgets)
     df = score_gate(out, budgets)
     if baseline is not None:
-        old = score_gate(baseline, budgets).query("solver in @FITTER")
+        rules = df.groupby("problem")[RULE_COLS].first()
+        old = score_gate(baseline, budgets, rules).query("solver == @FITTER")
+        if old.empty:
+            raise SystemExit(f"{baseline} has no {FITTER} fits on {problems}")
         if set(zip(old.problem, old.start, strict=True)) != set(
             zip(df.problem, df.start, strict=True)
         ):

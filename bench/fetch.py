@@ -34,8 +34,7 @@ REPOS = {
 
 
 def fetch_nist() -> None:
-    sys.path.insert(0, str(ROOT / "src"))
-    from bench.suites.nist import NAMES, URL
+    from .suites.nist import NAMES, URL
 
     dest = OUT / "nist"
     dest.mkdir(parents=True, exist_ok=True)
@@ -43,9 +42,7 @@ def fetch_nist() -> None:
         target = dest / f"{name}.dat"
         if target.exists():
             continue
-        req = urllib.request.Request(
-            URL.format(name=name), headers={"User-Agent": "symbolic-regression-rust"}
-        )
+        req = urllib.request.Request(URL.format(name=name), headers={"User-Agent": "symbfitrs"})
         with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 - fixed https URL
             target.write_bytes(r.read())
         print(f"  {target.relative_to(ROOT)}")

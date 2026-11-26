@@ -1,3 +1,5 @@
+import contextlib
+
 import numpy as np
 import pytest
 
@@ -44,12 +46,12 @@ def test_registered_function_receives_the_job(register):
 
     @register
     def stay_put(job):
-        seen.update(p0=job.p0, expr=job.expr, budget=job.budget_ms)
+        seen.update(p0=job.p0, budget=job.budget_ms)
         return job.p0
 
     rec = run_job(_problem(), "near", "stay_put", deadline_ms=50)
     assert rec["status"] == "returned" and rec["solver"] == "stay_put"
-    assert seen["budget"] == 50 and seen["p0"].shape == (2,) and seen["expr"] is None
+    assert seen["budget"] == 50 and seen["p0"].shape == (2,)
 
 
 def test_deadline_stops_a_baseline(register):
@@ -72,3 +74,32 @@ def test_failures_are_recorded(register, bad):
 
     rec = run_job(_problem(), "near", "broken", deadline_ms=50)
     assert rec["status"] == "failure" and rec["error"]
+
+
+def test_except_exception_cannot_swallow_the_deadline(register):
+    @register
+    def stubborn(job):
+        while True:
+            with contextlib.suppress(Exception):  # the pattern under test
+                job.residual(job.p0)
+
+    rec = run_job(_problem(), "near", "stubborn", deadline_ms=5)
+    assert rec["status"] == "deadline"
+
+
+def test_harness_errors_are_not_baseline_failures(register, monkeypatch):
+    @register
+    def stay_put(job):
+        return job.p0
+
+    pb = _problem()
+    calls = []
+    real = pb.model.predict
+
+    def predict(theta):  # fine for the start point, broken in the post-return check
+        calls.append(1)
+        return real(theta) if len(calls) == 1 else 1 / 0
+
+    monkeypatch.setattr(pb.model, "predict", predict)
+    with pytest.raises(ZeroDivisionError):
+        run_job(pb, "near", "stay_put", deadline_ms=50)

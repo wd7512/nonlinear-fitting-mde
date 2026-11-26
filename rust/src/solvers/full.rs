@@ -23,13 +23,14 @@ impl Lsq for FullLsq<'_> {
     }
     fn residual(&mut self, x: &DVector<f64>, r: &mut DVector<f64>) -> Res<f64> {
         let prob = &mut *self.prob;
-        let sse = self.tr.timed(true, || prob.residual(x.as_slice(), r.as_mut_slice()))?;
+        let sse = self.tr.timed(|| prob.residual(x.as_slice(), r.as_mut_slice()))?;
         self.tr.record(x.as_slice(), sse);
         Ok(sse)
     }
     fn jacobian(&mut self, x: &DVector<f64>, j: &mut DMatrix<f64>) -> Res<bool> {
         let prob = &mut *self.prob;
-        self.tr.timed(false, || prob.jacobian(x.as_slice(), j))?;
+        self.tr.check()?;
+        prob.jacobian(x.as_slice(), j);
         Ok(j.iter().all(|v| v.is_finite()))
     }
 }

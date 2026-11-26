@@ -6,6 +6,11 @@ every problem. Change them only between experiments, never within one.
 
 from __future__ import annotations
 
+from pathlib import Path
+
+CONFIG_DIR = Path(__file__).resolve().parent / "configs"  # the suite TOML files
+MAX_THETA_P = 128  # store parameters in records only for models up to this size
+
 SEED = 42
 
 # Benchmark grid

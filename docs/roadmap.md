@@ -24,12 +24,12 @@ results = pool.fit_many([(expr, x, y), ...], budget_ms=5)  # same order as the j
 
 1. It installs from PyPI on Linux and macOS without Rust.
 2. `compile`, `fit` and `Pool.fit_many` work.
-3. Gate success matches today's `auto` within the margins in `bench/gate.py`.
+3. Gate success matches [`baseline/gate.md`](baseline/gate.md) within the margins in `bench/gate.py`.
 4. The benchmark calls the installed package, compares string-to-parameters time against SciPy,
    and reports throughput and success at 1, 4 and 8 threads.
 
-Later: streaming results, Windows, buffer-reuse speed-ups (see `experiments.md`), parameter
-bounds, user-defined functions.
+Later: streaming results, Windows, buffer-reuse speed-ups, parameter bounds, user-defined
+functions.
 
 ## Layout
 
@@ -54,7 +54,7 @@ def scipy_trf(job):
 
 | step | work | done when |
 |---|---|---|
-| 1 | strip to this design, rename, split out `bench/`, baseline registry | tests pass, gate losses unchanged |
+| 1 | split out `bench/`, baseline registry | done |
 | 2 | Rust parser, differentiation, linear detection | Jacobians match SymPy's, gate holds |
 | 3 | Python bindings, thread pool, progress bar | a clean install fits an equation |
 | 4 | benchmark calls the package; end-to-end and thread-count comparisons | all six suites run |

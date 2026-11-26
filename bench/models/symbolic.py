@@ -129,7 +129,6 @@ class SymbolicModel(Model):
             )
         self.compiled = compiled or compile_expression(expr, tuple(params), tuple(variables))
         super().__init__(name, x2, params)
-        self.expression = str(self.compiled.expr)
         self.variables = list(variables)
         self._cols = [x2[:, j] for j in range(x2.shape[1])]
         if linear is None:

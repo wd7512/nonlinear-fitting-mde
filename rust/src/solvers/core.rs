@@ -51,7 +51,6 @@ fn run<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
     let mut rt = DVector::zeros(m);
     let mut lam = -1.0; // initialised from the first factorisation that needs it
     let mut nu = 2.0;
-    f.tracker().start_iterations();
     loop {
         if sse <= floor {
             return Ok(Status::Converged);
@@ -112,7 +111,6 @@ fn run<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
         std::mem::swap(&mut r, &mut rt);
         sse = sse_t;
         f.accept();
-        f.tracker().mark_iteration();
         if small_f || small_x {
             return Ok(Status::Converged);
         }

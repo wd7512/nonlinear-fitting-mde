@@ -1,8 +1,9 @@
 """Timed residual shared by every baseline.
 
 Every evaluation goes through here, which checks the cooperative per-run deadline *before*
-starting work, records every finite trial loss with the time at which it became available,
-keeps the best parameters actually evaluated and counts non-finite trials.
+starting work, records the loss of finite trials (the first and every improvement, or all of
+them) with the time at which each became available, keeps the best parameters actually
+evaluated and counts non-finite trials.
 """
 
 from __future__ import annotations
@@ -14,21 +15,27 @@ import numpy as np
 clock_ns = time.perf_counter_ns
 
 
-class DeadlineExceeded(Exception):
-    """Raised cooperatively when the per-run budget is exhausted."""
+class DeadlineExceeded(BaseException):
+    """Raised cooperatively when the per-run budget is exhausted.
+
+    A BaseException, so a baseline's own ``except Exception`` cannot swallow it.
+    """
 
 
 class TimedEvaluator:
-    def __init__(self, problem, deadline_ms: float, snapshot_ms=()):
+    """Callers run it under ``np.errstate(all="ignore")``; it does not set that itself."""
+
+    def __init__(self, problem, deadline_ms: float, snapshot_ms=(), full_history=False):
         self.model = problem.model
         self.w = problem.weights  # residual weights (1/sigma) or None
         self.y = problem.y
-        self.m = self.y.size
-        self.inv_scale = 1.0 / problem.denom
+        self.k = 1.0 / (self.y.size * problem.denom)  # sum of squares -> normalised loss
         self.deadline_ns = int(deadline_ms * 1e6)
+        self.full_history = full_history  # else keep only the first trial and improvements
         self.nfev = 0
         self.fev_ns = 0
         self.n_nonfinite = 0
+        self.n_trials = 0
         self.hist_t_ns: list[int] = []
         self.hist_loss: list[float] = []
         self.best_loss = np.inf
@@ -42,34 +49,37 @@ class TimedEvaluator:
         return clock_ns() - self.t0
 
     def loss_of(self, r: np.ndarray) -> float:
-        with np.errstate(all="ignore"):
-            return float(np.dot(r, r)) / self.m * self.inv_scale
+        return float(np.dot(r, r)) * self.k
 
-    def record(self, theta: np.ndarray, r: np.ndarray) -> None:
+    def weighted_residual(self, theta: np.ndarray) -> np.ndarray:
+        r = self.model.predict(theta) - self.y
+        return r if self.w is None else self.w * r
+
+    def record(self, theta: np.ndarray, r: np.ndarray, t: int) -> None:
+        """Record a trial whose residual ``r`` became available at ``t`` ns after the start."""
         loss = self.loss_of(r)
         if not np.isfinite(loss):
             self.n_nonfinite += 1
             return
-        t = self.elapsed_ns()
+        self.n_trials += 1
         while len(self.snapshots) < len(self._snap_ns) and t > self._snap_ns[len(self.snapshots)]:
             self.snapshots.append(self.best_theta)
-        self.hist_t_ns.append(t)
-        self.hist_loss.append(loss)
+        if self.full_history or loss < self.best_loss:
+            self.hist_t_ns.append(t)
+            self.hist_loss.append(loss)
         if loss < self.best_loss:
             self.best_loss = loss
             self.best_theta = np.array(theta, copy=True)
 
     def residual(self, theta: np.ndarray) -> np.ndarray:
-        if self.elapsed_ns() >= self.deadline_ns:
+        t1 = clock_ns()
+        if t1 - self.t0 >= self.deadline_ns:
             raise DeadlineExceeded
-        t = clock_ns()
-        with np.errstate(all="ignore"):
-            r = self.model.predict(theta) - self.y
-            if self.w is not None:
-                r = self.w * r
-            self.record(theta, r)
-        self.fev_ns += clock_ns() - t
+        r = self.weighted_residual(theta)
+        t2 = clock_ns()
+        self.fev_ns += t2 - t1
         self.nfev += 1
+        self.record(theta, r, t2 - self.t0)
         return r
 
     def snapshot_thetas(self) -> list[np.ndarray | None]:

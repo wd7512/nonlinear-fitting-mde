@@ -23,21 +23,16 @@ pub struct Tracker {
     pub hist_loss: Vec<f64>,
     pub n_trials: usize,
     pub nfev: usize,
-    pub njev: usize,
     pub fev_ns: u64,
-    pub jev_ns: u64,
     pub n_nonfinite: usize,
-    pub iter_ns: Vec<u64>,
-    last_iter: Instant,
 }
 
 impl Tracker {
     pub fn new(deadline_ms: f64, budgets_ms: &[f64], inv_scale: f64) -> Tracker {
-        let now = Instant::now();
         let mut snap_ns: Vec<u64> = budgets_ms.iter().map(|b| (b * 1e6) as u64).collect();
         snap_ns.sort_unstable();
         Tracker {
-            t0: now,
+            t0: Instant::now(),
             deadline_ns: (deadline_ms * 1e6) as u64,
             inv_scale,
             snap_ns,
@@ -48,12 +43,8 @@ impl Tracker {
             hist_loss: Vec::new(),
             n_trials: 0,
             nfev: 0,
-            njev: 0,
             fev_ns: 0,
-            jev_ns: 0,
             n_nonfinite: 0,
-            iter_ns: Vec::new(),
-            last_iter: now,
         }
     }
 
@@ -76,30 +67,14 @@ impl Tracker {
         }
     }
 
-    pub fn start_iterations(&mut self) {
-        self.last_iter = Instant::now();
-    }
-
-    pub fn mark_iteration(&mut self) {
-        let now = Instant::now();
-        self.iter_ns.push((now - self.last_iter).as_nanos() as u64);
-        self.last_iter = now;
-    }
-
-    /// Time an evaluation: `kind` true = residual (fev), false = Jacobian (jev).
+    /// Time a residual evaluation, after the deadline check.
     #[inline]
-    pub fn timed<T>(&mut self, fev: bool, f: impl FnOnce() -> T) -> Res<T> {
+    pub fn timed<T>(&mut self, f: impl FnOnce() -> T) -> Res<T> {
         self.check()?;
         let t = Instant::now();
         let out = f();
-        let dt = t.elapsed().as_nanos() as u64;
-        if fev {
-            self.nfev += 1;
-            self.fev_ns += dt;
-        } else {
-            self.njev += 1;
-            self.jev_ns += dt;
-        }
+        self.nfev += 1;
+        self.fev_ns += t.elapsed().as_nanos() as u64;
         Ok(out)
     }
 

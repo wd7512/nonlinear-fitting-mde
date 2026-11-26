@@ -9,19 +9,6 @@ from .baselines import BASELINES, Job
 from .evaluator import DeadlineExceeded, TimedEvaluator, clock_ns
 from .problem import Problem
 
-MAX_THETA_P = 128  # store per-checkpoint parameters only for models up to this size
-
-
-def compress_history(t_ns: list[int], loss: list[float]) -> tuple[list[float], list[float]]:
-    """Keep the first entry and every strict improvement: exactly what best-so-far scoring needs."""
-    ts, ls, best = [], [], np.inf
-    for t, v in zip(t_ns, loss, strict=True):
-        if not ts or v < best:
-            ts.append(t / 1e6)
-            ls.append(v)
-            best = min(best, v)
-    return ts, ls
-
 
 def run_job(
     problem: Problem,
@@ -34,38 +21,25 @@ def run_job(
     t_job = clock_ns()  # includes per-fit setup, for end-to-end throughput
     fn = BASELINES[solver_name]
     theta0 = problem.starts[start].copy()
+    ev = TimedEvaluator(problem, deadline_ms, budgets_ms, full_history)
+    job = Job(residual=ev.residual, p0=theta0.copy(), budget_ms=deadline_ms)
+    status, error, theta = "returned", None, None
     with np.errstate(all="ignore"):
-        loss0 = float(problem.loss_at(theta0))  # untimed; for the reduction success test
-    ev = TimedEvaluator(problem, deadline_ms, snapshot_ms=budgets_ms)
-    status, error = "returned", None
-    try:
-        ev.residual(theta0)  # initial loss, tracked at its actual time
-        job = Job(
-            ev.residual,
-            theta0.copy(),
-            problem.model.x,
-            problem.y,
-            problem.weights,
-            problem.model.expression,
-            deadline_ms,
-        )
-        with np.errstate(all="ignore"):
+        loss0 = ev.loss_of(ev.residual(theta0))  # initial loss, tracked at its actual time
+        try:  # only the baseline itself; harness errors propagate
             theta = np.asarray(fn(job), dtype=float)
-            if theta.shape != (problem.p,) or not np.isfinite(problem.loss_at(theta)):
+        except DeadlineExceeded:
+            status = "deadline"
+        except Exception as exc:  # noqa: BLE001 - one failing baseline must not stop the run
+            status, error = "failure", f"{type(exc).__name__}: {exc}"[:200]
+        elapsed_ns = ev.elapsed_ns()  # the solver's time; the checks below are not charged to it
+        if theta is not None:
+            r = ev.weighted_residual(theta) if theta.shape == (problem.p,) else None
+            if r is None or not np.isfinite(ev.loss_of(r)):
                 status, error = "failure", "non-finite or misshapen result"
-            elif ev.elapsed_ns() < ev.deadline_ns:
-                r = problem.model.predict(theta) - problem.y
-                ev.record(theta, r if problem.weights is None else problem.weights * r)
-    except DeadlineExceeded:
-        status = "deadline"
-    except Exception as exc:  # noqa: BLE001 - one failing baseline must not stop the run
-        status, error = "failure", f"{type(exc).__name__}: {exc}"[:200]
-    elapsed_ns = ev.elapsed_ns()
-    if full_history:
-        hist_t, hist_l = [t / 1e6 for t in ev.hist_t_ns], list(ev.hist_loss)
-    else:
-        hist_t, hist_l = compress_history(ev.hist_t_ns, ev.hist_loss)
-    small = problem.p <= MAX_THETA_P
+            elif elapsed_ns < ev.deadline_ns:
+                ev.record(theta, r, elapsed_ns)
+    small = problem.p <= config.MAX_THETA_P
 
     def _lst(th):
         return None if th is None else th.tolist()
@@ -98,8 +72,8 @@ def run_job(
         "nfev": ev.nfev,
         "fev_ms": ev.fev_ns / 1e6,
         "n_nonfinite": ev.n_nonfinite,
-        "n_trials": len(ev.hist_loss),
+        "n_trials": ev.n_trials,
         # first loss + every improvement (or every finite trial with full_history), ms since start
-        "hist_t_ms": hist_t,
-        "hist_loss": hist_l,
+        "hist_t_ms": [t / 1e6 for t in ev.hist_t_ns],
+        "hist_loss": ev.hist_loss,
     }

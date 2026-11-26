@@ -17,8 +17,6 @@ class Model:
         self.param_names = list(param_names)
         self.set_linear(linear_idx)
 
-    expression: str | None = None  # the equation as text, when there is one
-
     # ---- shape ----
     @property
     def p(self) -> int:

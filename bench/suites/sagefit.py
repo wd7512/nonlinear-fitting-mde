@@ -52,7 +52,6 @@ def build(spec, rng: np.random.Generator):
                     ref_mode="best_found",
                     loss_norm=spec.loss_norm,
                     tags={
-                        "jacobian": model.jacobian_kind,
                         "candidate": f"c{k}",
                         "paper_nmse": float(ev.get("new_best_nmse", "nan")),
                     },

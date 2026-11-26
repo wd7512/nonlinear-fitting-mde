@@ -15,17 +15,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from scipy.optimize import least_squares
-
 
 @dataclass(frozen=True)
 class Job:
     residual: Callable[[Any], Any]  # p -> weighted residual vector
     p0: Any  # starting parameters
-    x: Any  # (m, d) inputs
-    y: Any  # (m,) observations
-    weights: Any  # (m,) residual weights, or None
-    expr: str | None  # the equation, when it has a symbolic form
     budget_ms: float
 
 
@@ -39,9 +33,13 @@ def baseline(fn):
 
 @baseline
 def scipy_trf(job):
+    from scipy.optimize import least_squares  # here, so the CLI does not pay for the import
+
     return least_squares(job.residual, job.p0, method="trf").x
 
 
 @baseline
 def scipy_lm(job):
+    from scipy.optimize import least_squares
+
     return least_squares(job.residual, job.p0, method="lm").x

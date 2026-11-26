@@ -302,7 +302,7 @@ def build_report(
         md += [f"## {title}", "", body, ""]
     md += ["## Notes", ""] + [f"- {n}" for n in notes]
     (out_dir / "summary.md").write_text("\n".join(md) + "\n")
-    listy = ["hist_t_ms", "hist_loss", "iter_ms", "theta_at", "best_theta", "ref_params"]
+    listy = ["hist_t_ms", "hist_loss", "theta_at", "best_theta", "ref_params"]
     df.drop(columns=[c for c in listy if c in df]).to_csv(out_dir / "records.csv", index=False)
 
     if plot:

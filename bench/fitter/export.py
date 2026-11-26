@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import sympy as sp
 
+from ..config import MAX_THETA_P
 from ..models import SymbolicModel, VectorResidualModel
 from ..models.families import CoupledTanh, ExpMixture, SinMixture
 from ..problem import Problem
@@ -97,12 +98,11 @@ def export_problems(problems: list[Problem], meta: dict, path: Path) -> dict:
         if not (np.all(np.isfinite(pb.y)) and all(np.all(np.isfinite(c)) for c in cols)):
             skipped[pb.pid] = "non-finite data"
             continue
-        small = pb.p <= 128
+        small = pb.p <= MAX_THETA_P
         record = {
             "dataset": pb.dataset,
             "model": pb.model_name,
             "curve": pb.curve,
-            "jacobian": "analytic",
             "loss_norm": pb.loss_norm,
             "ref_loss": _finite_or_none(pb.ref_loss),
             "ref_mode": pb.ref_mode,

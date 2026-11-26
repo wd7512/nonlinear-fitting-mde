@@ -18,6 +18,9 @@ use symbfitrs::tape::Program;
 use symbfitrs::tracker::Tracker;
 use serde_json::{json, Map, Value};
 
+const USAGE: &str = "usage: symbfitrs-bench bench --problems P.json --out records.jsonl
+                [--budgets 1,5,10,25] [--deadline-ms 25] [--max-wall-s 600] [--seed 42]";
+
 /// Label of the fitter in records and reports.
 const NAME: &str = "symbfitrs";
 
@@ -34,7 +37,7 @@ fn parse_args() -> Result<Args, String> {
     let mut it = std::env::args().skip(1);
     match it.next().as_deref() {
         Some("bench") => {}
-        _ => return Err(include_str!("main.rs").lines().take(4).collect::<Vec<_>>().join("\n")),
+        _ => return Err(USAGE.into()),
     }
     let mut a = Args {
         problems: String::new(),
@@ -81,13 +84,6 @@ fn shuffle<T>(v: &mut [T], seed: u64) {
         let j = (next() % (i as u64 + 1)) as usize;
         v.swap(i, j);
     }
-}
-
-fn subsample(ns: &[u64], k: usize) -> Vec<f64> {
-    if ns.len() <= k {
-        return ns.iter().map(|&x| x as f64 / 1e6).collect();
-    }
-    (0..k).map(|i| ns[i * (ns.len() - 1) / (k - 1)] as f64 / 1e6).collect()
 }
 
 fn opt_vec(v: &Option<Vec<f64>>) -> Value {
@@ -195,12 +191,11 @@ fn bench(args: Args) -> Result<(), String> {
         let elapsed_ms = tr.elapsed_ms();
         let job_wall_ms = t_job.elapsed().as_secs_f64() * 1e3;
 
-        let label = match path {
-            "varpro" => NAME.to_string(),
-            "no linear params" => format!("{NAME} (LM fallback)"),
-            other => format!("{NAME} ({other})"),
+        let label = match path.label() {
+            None => NAME.to_string(),
+            Some(l) => format!("{NAME} ({l})"),
         };
-        let small = pb.p <= 128;
+        let small = pb.p <= 128; // bench.config.MAX_THETA_P
         let mut rec = Map::new();
         rec.insert("type".into(), json!("fit"));
         if let Some(fields) = pb.record.as_object() {
@@ -228,13 +223,9 @@ fn bench(args: Args) -> Result<(), String> {
                 if small { json!(tr.snapshot_thetas().iter().map(opt_vec).collect::<Vec<_>>()) } else { Value::Null },
             ),
             ("nfev", json!(tr.nfev)),
-            ("njev", json!(tr.njev)),
             ("fev_ms", json!(tr.fev_ns as f64 / 1e6)),
-            ("jev_ms", json!(tr.jev_ns as f64 / 1e6)),
             ("n_nonfinite", json!(tr.n_nonfinite)),
             ("n_trials", json!(tr.n_trials)),
-            ("n_iter", json!(tr.iter_ns.len())),
-            ("iter_ms", json!(subsample(&tr.iter_ns, 256))),
             ("hist_t_ms", json!(tr.hist_t_ms)),
             ("hist_loss", json!(tr.hist_loss)),
         ];

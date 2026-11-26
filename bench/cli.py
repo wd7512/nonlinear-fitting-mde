@@ -16,8 +16,9 @@ import sys
 import time
 from pathlib import Path
 
+from .config import CONFIG_DIR
+
 T_INVOCATION = time.perf_counter()
-CONFIG_DIR = Path(__file__).resolve().parent / "configs"
 
 
 def resolve_config(name: str) -> Path:
@@ -41,6 +42,10 @@ def main(argv: list[str] | None = None) -> None:
         sp.add_argument("--out", type=Path, default=None, help="default: results/<name>")
         sp.add_argument("--no-plot", action="store_true")
         if name == "run":
+            sp.add_argument(
+                "--baseline-records", type=Path, default=None,
+                help="with --fitter: SciPy records to merge (default: results/<name>/records.jsonl)",
+            )  # fmt: skip
             sp.add_argument(
                 "--jobs", type=int, nargs="?", const=4, default=1,
                 help="parallel single-threaded workers (bare flag: 4); timings get noisier",
@@ -75,7 +80,9 @@ def main(argv: list[str] | None = None) -> None:
 
         out = args.out or Path("results") / f"{cfg.name}_rust"
         if args.cmd == "run":
-            python_records = Path("results") / cfg.name / "records.jsonl"
+            python_records = args.baseline_records or Path("results") / cfg.name / "records.jsonl"
+            if not python_records.exists():
+                print(f"no baseline records at {python_records}; reporting the fitter alone")
             run(cfg, out, python_records, plot, T_INVOCATION, args.jobs)
         else:
             merged = out / "records.jsonl"
