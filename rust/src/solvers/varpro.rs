@@ -27,6 +27,7 @@ pub struct VarPro<'a> {
     dnl: DMatrix<f64>,
     trial: Option<Proj>,
     current: Option<Proj>,
+    reuse_basis: bool,
 }
 
 impl<'a> VarPro<'a> {
@@ -40,9 +41,14 @@ impl<'a> VarPro<'a> {
             dnl: DMatrix::zeros(m, p - k),
             trial: None,
             current: None,
+            reuse_basis: false,
             prob,
             tr,
         }
+    }
+
+    pub(crate) fn reuse_basis(&mut self) {
+        self.reuse_basis = true;
     }
 
     pub fn beta_of(&self, theta: &[f64]) -> DVector<f64> {
@@ -81,10 +87,16 @@ impl<'a> VarPro<'a> {
             self.theta[i] = a;
         }
         let rank = fac.rank();
-        let u = fac.u.expect("u requested").columns(0, fac.s.len()).into_owned();
-        // keep only the numerically independent directions of range(Φ)
-        let keep: Vec<usize> = (0..fac.s.len()).filter(|&i| fac.s[i] > fac.tol).collect();
-        let u = if rank == fac.s.len() { u } else { u.select_columns(&keep) };
+        let basis = fac.u.expect("u requested");
+        let u = if self.reuse_basis && rank == fac.s.len() {
+            debug_assert_eq!(basis.ncols(), rank);
+            basis
+        } else {
+            let u = basis.columns(0, fac.s.len()).into_owned();
+            // Keep only the numerically independent directions of range(Φ).
+            let keep: Vec<usize> = (0..fac.s.len()).filter(|&i| fac.s[i] > fac.tol).collect();
+            if rank == fac.s.len() { u } else { u.select_columns(&keep) }
+        };
         self.trial = Some(Proj { alpha, u });
         r.norm_squared()
     }

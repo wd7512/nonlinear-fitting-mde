@@ -48,12 +48,47 @@ mod tests {
     }
 }
 
+/// Opt-in benchmark revisions, separate from the unchanged public `Policy` settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BenchmarkPolicy {
+    Existing(Policy),
+    AutoV1_1,
+}
+
+impl BenchmarkPolicy {
+    pub fn parse(name: &str) -> Result<Self, String> {
+        match name {
+            "auto_v1.1" => Ok(Self::AutoV1_1),
+            _ => Policy::parse(name).map(Self::Existing)
+                .map_err(|e| format!("{e}; opt-in revisions: auto_v1.1")),
+        }
+    }
+
+    pub fn run(self, prob: &mut Problem, theta0: &[f64], tr: &mut Tracker) -> (Status, &'static str) {
+        match self {
+            Self::Existing(policy) => run(policy, prob, theta0, tr),
+            Self::AutoV1_1 => run_revision::<1>(AUTO, prob, theta0, tr),
+        }
+    }
+}
+
+const AUTO: Policy = Policy { projected: true, mode: Mode::Lm, auto: true };
+
 /// Fit `prob` from `theta0` under `tr`'s deadline. Returns (status, label describing the path).
 pub fn run(policy: Policy, prob: &mut Problem, theta0: &[f64], tr: &mut Tracker) -> (Status, &'static str) {
+    run_revision::<0>(policy, prob, theta0, tr)
+}
+
+fn run_revision<const REV: u8>(
+    policy: Policy, prob: &mut Problem, theta0: &[f64], tr: &mut Tracker,
+) -> (Status, &'static str) {
     let opts = Opts { mode: policy.mode, ..Opts::default() };
     let k = prob.lin.len();
     if policy.projected && k > 0 && prob.sep.is_some() {
         let mut vp = VarPro::new(prob, tr);
+        if REV >= 1 {
+            vp.reuse_basis();
+        }
         let beta0 = vp.beta_of(theta0);
         if beta0.is_empty() {
             // fully linear: the single projected solve is the exact answer

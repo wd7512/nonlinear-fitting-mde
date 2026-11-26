@@ -15,7 +15,7 @@ use std::io::{BufWriter, Write};
 use std::time::Instant;
 
 use nlfit_core::features::{probe_features, static_features};
-use nlfit_core::policy::{self, Policy};
+use nlfit_core::policy::BenchmarkPolicy;
 use nlfit_core::problem::Problem;
 use nlfit_core::tape::Program;
 use nlfit_core::tracker::Tracker;
@@ -119,10 +119,10 @@ fn main() {
 
 fn bench(args: Args) -> Result<(), String> {
     let t_start = Instant::now();
-    let policies: Vec<(String, Policy)> = args
+    let policies: Vec<(String, BenchmarkPolicy)> = args
         .policies
         .iter()
-        .map(|n| Policy::parse(n).map(|p| (n.clone(), p)))
+        .map(|n| BenchmarkPolicy::parse(n).map(|p| (n.clone(), p)))
         .collect::<Result<_, _>>()?;
 
     // ---- load + bind (setup, reported separately) ----
@@ -154,7 +154,7 @@ fn bench(args: Args) -> Result<(), String> {
         let theta0 = pb.starts[0].1.clone();
         for (_, pol) in &policies {
             let mut tr = Tracker::new(deadline_ms.min(5.0), &budgets, pb.inv_scale);
-            policy::run(*pol, pb, &theta0, &mut tr);
+            pol.run(pb, &theta0, &mut tr);
         }
     }
     let t_warm = t0.elapsed().as_secs_f64();
@@ -218,7 +218,7 @@ fn bench(args: Args) -> Result<(), String> {
 
         let t_job = Instant::now();
         let mut tr = Tracker::new(deadline_ms, &budgets, pb.inv_scale);
-        let (status, path) = policy::run(policies[a].1, pb, &theta0, &mut tr);
+        let (status, path) = policies[a].1.run(pb, &theta0, &mut tr);
         let elapsed_ms = tr.elapsed_ms();
         let job_wall_ms = t_job.elapsed().as_secs_f64() * 1e3;
 
