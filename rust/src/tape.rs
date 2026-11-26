@@ -281,11 +281,6 @@ impl Bound {
         self.dynamic.len()
     }
 
-    /// Scalar-equivalent work of one evaluation (sum of dynamic register widths).
-    pub fn work(&self) -> usize {
-        self.dynamic.iter().map(|&i| self.width[i as usize]).sum()
-    }
-
     #[inline]
     fn exec(&mut self, i: usize, theta: &[f64]) {
         use Op::*;

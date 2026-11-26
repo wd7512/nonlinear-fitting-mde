@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from symbolic_regression_rust import config
-from symbolic_regression_rust.datasets.synthetic import make_problem
-from symbolic_regression_rust.models import SymbolicModel
+from bench import config
+from bench.models import SymbolicModel
+from bench.suites.synthetic import make_problem
 
 
 def fd_jacobian(model, theta, h=1e-6):
@@ -38,23 +38,6 @@ def test_family_jacobians(synthetic):
 def test_true_parameters_give_zero_loss(synthetic):
     for pb in synthetic:
         assert pb.loss_at(pb.ref_params) == 0.0
-
-
-def test_family_separable_matches_generic(synthetic):
-    from symbolic_regression_rust.models.base import Model
-
-    for pb in synthetic:
-        m = pb.model
-        if m.n_linear == 0:
-            continue
-        alpha, beta = m.split(pb.starts["far"])
-        phi, c = m.separable(beta)
-        phi_g, c_g = Model.separable(m, beta)
-        np.testing.assert_allclose(phi, phi_g)
-        np.testing.assert_allclose(c, c_g, atol=1e-14)
-        np.testing.assert_allclose(
-            m.nonlinear_jacobian(alpha, beta), Model.nonlinear_jacobian(m, alpha, beta)
-        )
 
 
 def test_symbolic_model_jacobian_and_linear_detection():

@@ -107,15 +107,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nlfit-core"
-version = "0.1.0"
-dependencies = [
- "libm",
- "nalgebra",
- "serde_json",
-]
-
-[[package]]
 name = "num-bigint"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -248,6 +239,15 @@ dependencies = [
  "num-complex",
  "num-traits",
  "wide",
+]
+
+[[package]]
+name = "symbfitrs"
+version = "0.1.0"
+dependencies = [
+ "libm",
+ "nalgebra",
+ "serde_json",
 ]
 
 [[package]]

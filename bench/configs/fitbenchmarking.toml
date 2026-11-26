@@ -1,0 +1,16 @@
+# FitBenchmarking real-world Mantid problems (neutron & muon instruments,
+# NIST-style simple tests), unweighted NLLS (FitBenchmarking's default cost), given starts.
+# Data: uv run python -m bench.fetch fitbenchmarking
+name = "fitbenchmarking"
+budgets_ms = [1, 5, 10, 25, 100]
+targets = [1e-3, 1e-8]
+success = "relative"
+relative_floor = 1e-12
+worker_deadline_s = 300
+watchdog_s = 400
+
+[[datasets]]
+kind = "fitbenchmarking"
+path = "data/external/fitbenchmarking/examples/benchmark_problems"
+sets = ["Neutron", "Muon", "simple_tests", "Mantid_System_Test_Data"]
+use_errors = false

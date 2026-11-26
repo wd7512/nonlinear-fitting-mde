@@ -1,7 +1,8 @@
-import numpy as np
-import pandas as pd
+import json
 
-from symbolic_regression_rust.rust_bridge.gate import _sample, _side, best_threshold, pair
+import numpy as np
+
+from bench.gate import RULE_COLS, _sample, _side, score_gate
 
 
 def test_side_is_deterministic_per_group():
@@ -18,16 +19,18 @@ def test_sample_spreads_over_groups():
     assert sorted(got) == ["a", "a", "b", "b", "c", "c"]
 
 
-def test_compare_finds_a_planted_threshold():
-    rows = []
-    for i in range(40):
-        p = i % 20
-        common = {"problem": f"p{i}", "start": "a", "suite": "s", "feat_p": p, "ok_5": True}
-        rows.append({**common, "solver": "base", "ttt": 2.0})
-        # the challenger is faster for small p and fails for large p
-        rows.append({**common, "solver": "chal", "ok_5": p < 8, "ttt": 1.0})
-    t = pair(pd.DataFrame(rows), "base", "chal")
-    assert (t.outcome == "win").sum() == 16
-    rule = best_threshold(t, "feat_p")
-    assert rule["rule"] == "<= 7.5"
-    assert rule["success"] == 1.0
+def _fit(ref):
+    return {
+        "type": "fit", "problem": "p", "dataset": "d", "model": "m", "start": "s",
+        "solver": "symbfitrs", "n_nonfinite": 0, "loss0": 1.0, "best_loss": 0.5,
+        "hist_t_ms": [0.1], "hist_loss": [0.5], "ref_loss": ref, "ref_mode": "given",
+        "gate_mode": "absolute", "gate_target": 0.1, "gate_floor": 1e-20,
+    }  # fmt: skip
+
+
+def test_rules_replace_the_stored_reference(tmp_path):
+    path = tmp_path / "old.jsonl"
+    path.write_text(json.dumps(_fit(0.0)) + "\n")  # loss 0.5 misses a reference of 0
+    assert not score_gate(path, [1.0])["ok_1"].iloc[0]
+    rules = score_gate(path, [1.0]).assign(ref_loss=0.45).groupby("problem")[RULE_COLS].first()
+    assert score_gate(path, [1.0], rules)["ok_1"].iloc[0]

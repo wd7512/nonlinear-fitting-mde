@@ -1,48 +1,38 @@
-# symbolic-regression-rust
+# symbfitrs
 
-How fast can a CPU fit a nonlinear equation? `symreg-rs` races least-squares optimisers on
-millisecond budgets (1, 5, 10, 25, 100 ms per fit) across standard benchmark suites and your
-own data, and reports how often each one reaches the target in time.
+A fast CPU fitter for nonlinear equations, written in Rust, for use inside symbolic regression:
+you propose the equations, it fits their parameters on millisecond budgets (variable projection
++ Levenberg–Marquardt, up to about 100 parameters).
 
-Optimisers: Adam, L-BFGS, Gauss–Newton, Levenberg–Marquardt (LM), trust-region reflective
-(TRF), variable projection + LM (VarPro), and a single-threaded Rust optimiser (`rust/`) that
-defaults to VarPro + LM.
+**Status: not installable yet.** The solver works and is benchmarked, but the Rust equation
+compiler and the Python package are still to be built. See [`docs/roadmap.md`](docs/roadmap.md).
 
-## Quick start
+## Benchmark
 
-Needs [uv](https://docs.astral.sh/uv/); the Rust optimiser also needs
-[cargo](https://rustup.rs/).
+Needs [uv](https://docs.astral.sh/uv/) and [cargo](https://rustup.rs/).
 
 ```bash
 uv sync
-uv run symreg-rs run synthetic_smoke          # 144 fits on synthetic equations, a few seconds
-uv run symreg-rs run synthetic_smoke --rust   # the same problems with the Rust optimiser
+uv run python -m bench run quick            # SciPy baselines on synthetic equations
+uv run python -m bench run quick --fitter   # the Rust fitter on the same problems
 ```
 
-Results go to `results/<name>/summary.md` (tables), `records.jsonl` (every fit with its loss
-history) and `success_vs_time.png`.
-
-## Commands
+Results go to `results/<name>/` (or `<name>_rust/`): `summary.md`, `records.jsonl` (every fit
+with its loss history) and `success_vs_time.png`.
 
 | command | what it does |
 |---|---|
-| `symreg-rs run CONFIG [--rust]` | fit every problem with every optimiser, then report |
-| `symreg-rs report CONFIG [--rust]` | rebuild the report from saved records |
-| `symreg-rs inspect CONFIG` | validate a config and preview its problems |
-| `symreg-rs gate build` / `gate run` | fixed dev/test cases for changes to the Rust optimiser |
-| `symreg-rs gate compare --challenger lm` | where another Rust policy beats `auto`, by problem feature |
+| `python -m bench run CONFIG [--fitter]` | fit every problem, then report |
+| `python -m bench report CONFIG [--fitter]` | rebuild the report from saved records |
+| `python -m bench gate build` / `gate run` | fixed dev/test cases for changes to the fitter |
 
-`run --jobs` shares the fits between 4 single-threaded workers. It is much faster, but the
-timings get noisier, so use one worker when comparing speeds.
+`run --jobs` shares the fits between 4 workers. It is faster, but timings get noisier.
 
-`CONFIG` is a path or a name from `configs/`. With `--rust`, results go to
-`results/<name>_rust/` and are merged with the Python results of the same config if they exist.
-
-## Benchmark suites
+### Suites
 
 ```bash
-uv run python scripts/fetch_benchmarks.py        # downloads into data/external/
-uv run symreg-rs run nist_strd
+uv run python -m bench.fetch                # downloads into data/external/
+uv run python -m bench run nist_strd
 ```
 
 | config | data | success means |
@@ -52,61 +42,42 @@ uv run symreg-rs run nist_strd
 | `synthetic_scale` | exponential, sine and tanh families, up to 99 parameters (built in) | loss below 1e-6 (noise-free) |
 | `sagefit_spb` | [SAGE-Fit](https://github.com/CAS-CLab/SAGE-Fit), 20 curves × 10 candidate equations | within SAGE-Fit's "lost" threshold; ranking accuracy |
 | `fitbenchmarking` | [FitBenchmarking](https://github.com/fitbenchmarking/fitbenchmarking) Mantid problems | within 1e-3 of the best found |
-| `stringer2019_gratings` | [Stringer et al. 2019](https://doi.org/10.25378/janelia.8279387) V1 neurons × 10 tuning equations | within 1% of the best MSE found (true equation unknown) |
+| `stringer2019_gratings` | [Stringer et al. 2019](https://doi.org/10.25378/janelia.8279387) V1 neurons × 10 tuning equations | within 1% of the best MSE found |
 
-`fetch_benchmarks.py` takes suite names (`nist`, `fitbenchmarking`, `sagefit`,
-`stringer2019`); without arguments it fetches the first three. The Stringer recording is
-860 MB.
+`bench.fetch` takes suite names (`nist`, `fitbenchmarking`, `sagefit`, `stringer2019`); without
+arguments it fetches the first three. The Stringer recording is 860 MB. SAGE-Fit candidates are
+Python code that gets executed, so only run data you trust.
 
-## Your own data
+### Baselines
 
-Put a table in `data/`, write a config in `configs/`, check it with `inspect`, then `run` it.
-CSV, TSV, Parquet, JSON and NPZ files work, with many curves per file, optional per-point
-errors and several candidate equations written as expressions.
-See [`data/README.md`](data/README.md) and `configs/examples/`.
+One registered function in [`bench/baselines.py`](bench/baselines.py):
 
-Expressions are parsed with SymPy and Python candidate functions are executed, so only run
-configs and data you trust.
-
-## How it measures
-
-- **One thread, one fit at a time.** Fits run in a shuffled order after a warm-up.
-- **No late credit.** Each loss is timestamped; a checkpoint at B ms counts only losses
-  available by B ms.
-- **Loss** is the mean squared weighted residual, normalised per dataset. Success compares it
-  with a reference: a certified value, zero for noise-free data, or the best any optimiser found.
-- **Fixed defaults.** No optimiser is tuned on the benchmarks.
-- **The Rust optimiser** runs on equations exported from SymPy as compiled instruction lists.
-  Problems without a symbolic form are skipped there.
-
-The original experiment design is in [`docs/benchmark-design.md`](docs/benchmark-design.md).
-
-## Optimizer comparison
-
-Success rate on the shared synthetic benchmark (higher is better):
-
-![Graph comparing optimizer success rate against time budget. Rust auto_v1 and three SciPy methods are shown at 1, 5, 10, 25, and 100 milliseconds.](docs/baseline/optimizer-success-rate.png)
-
-Success means reaching normalized MSE `≤ 1e-6` within the budget. The benchmark
-uses the same 24 generated fits for each optimizer: three equation families,
-four parameter counts (2, 8, 32, 96), and near/far starting points. Rust `auto_v1`
-is the repository's current Rust `auto` policy; it is the unchanged baseline,
-not the unmerged opt-in optimization PR. SciPy methods use this project's fixed
-least-squares tolerances and parameter scaling, rather than SciPy's unmodified
-library defaults. Results are from one run on Apple Silicon with Python 3.12.14,
-NumPy 2.5.5, and SciPy 1.18.1; each percentage is over 24 fits. These
-machine-specific results are illustrative, not a general performance claim.
-
-Reproduce the comparison with:
-
-```bash
-uv run symreg-rs run readme_comparison
-uv run symreg-rs run readme_comparison --rust
+```python
+@baseline
+def scipy_trf(job):
+    return least_squares(job.residual, job.p0, method="trf").x
 ```
 
-The first command records the three SciPy methods; the second adds the Rust
-baseline and generates the merged report. The config is
-[`configs/readme_comparison.toml`](configs/readme_comparison.toml).
+### How it measures
+
+- **One thread per fit.** Fits run in a shuffled order after a warm-up.
+- **No late credit.** A checkpoint at B ms counts only losses available by B ms.
+- **Loss** is the mean squared weighted residual, normalised per dataset.
+- **SciPy runs at its defaults** (finite-difference Jacobian, default tolerances).
+- **Compile time is not yet counted** for either side. The end-to-end, string-to-parameters
+  comparison comes with the Python package (roadmap step 4), so do not read the current numbers
+  as an end-to-end speed claim.
+
+### Gate
+
+To change the fitter, run a tier before and after, then compare:
+
+```bash
+uv run python -m bench gate run --tier dev
+uv run python -m bench gate run --tier dev --baseline results/gate/<earlier run>.jsonl
+```
+
+The acceptance margins are fixed in advance in [`bench/gate.py`](bench/gate.py).
 
 ## Development
 
@@ -115,10 +86,6 @@ uv run pytest
 uv run ruff check && uv run ruff format --check
 cargo test --release --manifest-path rust/Cargo.toml
 ```
-
-To change what the Rust optimiser does by default, compare on the gate (`--tier quick`, `dev`,
-`test`, `rank`). The acceptance margins are fixed in advance in
-`src/symbolic_regression_rust/rust_bridge/gate.py`.
 
 ## License
 

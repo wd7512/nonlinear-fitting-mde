@@ -1,7 +1,7 @@
 [project]
-name = "symbolic-regression-rust"
+name = "symbfitrs"
 version = "0.1.0"
-description = "Benchmark nonlinear least-squares optimisers on millisecond CPU budgets."
+description = "Fast nonlinear least-squares fitting on millisecond CPU budgets."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -21,14 +21,6 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/wd7512/symbolic-regression-rust"
 
-[project.scripts]
-symreg-rs = "symbolic_regression_rust.cli:main"
-
-[project.optional-dependencies]
-parquet = [
-    "pyarrow>=16",
-]
-
 [dependency-groups]
 dev = [
     "pytest>=8",
@@ -45,12 +37,12 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["symbolic_regression_rust"]
+known-first-party = ["bench"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-ra"
 
-[build-system]
-requires = ["uv_build>=0.8,<0.14.0"]
-build-backend = "uv_build"
+[tool.uv]
+package = false  # nothing is shipped until the Python bindings exist (docs/roadmap.md, step 3)

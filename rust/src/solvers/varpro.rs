@@ -122,7 +122,6 @@ impl Lsq for VarPro<'_> {
     }
     fn jacobian(&mut self, beta: &DVector<f64>, j: &mut DMatrix<f64>) -> Res<bool> {
         self.tr.check()?;
-        let t = std::time::Instant::now();
         let cur = self.current.as_ref().expect("jacobian before an accepted residual");
         let prob = &mut *self.prob;
         let mut theta = vec![0.0; prob.p];
@@ -137,8 +136,6 @@ impl Lsq for VarPro<'_> {
         let utd = cur.u.tr_mul(&self.dnl);
         j.copy_from(&self.dnl);
         j.gemm(-1.0, &cur.u, &utd, 1.0);
-        self.tr.njev += 1;
-        self.tr.jev_ns += t.elapsed().as_nanos() as u64;
         Ok(j.iter().all(|v| v.is_finite()))
     }
 }

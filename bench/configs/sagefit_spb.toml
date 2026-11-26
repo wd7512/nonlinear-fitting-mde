@@ -1,0 +1,16 @@
+# SAGE-Fit Structure-Progress Bank: 20 problems x 10 candidate equations.
+# Ranking quality (Kendall tau, top-1, lost rate). Target 2.0 relative <=> NMSE <= 3 S_ref
+# (SAGE-Fit's "lost" threshold). Data: uv run python -m bench.fetch sagefit
+name = "sagefit_spb"
+budgets_ms = [1, 5, 10, 25, 100]
+targets = [2.0, 1e-6]
+success = "relative"
+relative_floor = 1e-12
+worker_deadline_s = 900
+watchdog_s = 1000
+
+[[datasets]]
+kind = "sagefit_spb"
+path = "data/external/sagefit"
+split = "train"
+random_starts = 1

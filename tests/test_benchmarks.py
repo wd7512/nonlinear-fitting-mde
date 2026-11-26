@@ -1,7 +1,7 @@
 """Transcription checks for the external benchmark suites.
 
 MGH and the model kernels need no downloads. NIST, SAGE-Fit and FitBenchmarking tests
-are skipped unless ``scripts/fetch_benchmarks.py`` has populated ``data/external``.
+are skipped unless ``python -m bench.fetch`` has populated ``data/external``.
 """
 
 from pathlib import Path
@@ -11,22 +11,20 @@ import pandas as pd
 import pytest
 from scipy.optimize import least_squares
 
-from symbolic_regression_rust.benchmarks import fitbenchmarking, mgh, nist
-from symbolic_regression_rust.models import (
+from bench.models import (
     SymbolicModel,
     VectorResidualModel,
     python_function_model,
 )
-from symbolic_regression_rust.models.families import make_family
-from symbolic_regression_rust.scoring import tolerance
+from bench.models.families import make_family
+from bench.scoring import tolerance
+from bench.suites import fitbenchmarking, mgh, nist
 
 EXT = Path(__file__).resolve().parents[1] / "data" / "external"
 
 
 def needs(d):
-    return pytest.mark.skipif(
-        not (EXT / d).exists(), reason=f"run scripts/fetch_benchmarks.py ({d})"
-    )
+    return pytest.mark.skipif(not (EXT / d).exists(), reason=f"run python -m bench.fetch ({d})")
 
 
 def fd(f, theta, h=1e-6):
@@ -87,8 +85,6 @@ def test_odd_p_mixture_offset():
     assert m.n_linear == 3 and m.param_names[-1] == "c"
     th = np.array([1.0, 2.0, 0.5, 3.0, 0.3])
     np.testing.assert_allclose(m.jacobian(th), fd(m.predict, th), rtol=1e-6, atol=1e-8)
-    phi, c = m.separable(th[m.nonlinear_idx])
-    np.testing.assert_allclose(phi @ th[m.linear_idx] + c, m.predict(th))
 
 
 def test_numeric_linear_detection():
@@ -160,7 +156,7 @@ def test_back_to_back_exponential_stable():
         "name=BackToBackExponential,I=100,A=1,B=0.05,X0=1000,S=5"
     )
     x = np.linspace(800, 1600, 4000)  # B = 0.05: long right tail
-    from symbolic_regression_rust.models.symbolic import compile_sympy
+    from bench.models.symbolic import compile_sympy
 
     m = SymbolicModel(
         "b",
@@ -190,7 +186,7 @@ def test_fitbenchmarking_scan():
 def test_sagefit_candidates_load():
     import json
 
-    from symbolic_regression_rust.benchmarks.sagefit import BANK
+    from bench.suites.sagefit import BANK
 
     bank = json.loads((EXT / "sagefit" / BANK).read_text())
     assert len(bank) == 20 and all(len(p["events"]) == 10 for p in bank)

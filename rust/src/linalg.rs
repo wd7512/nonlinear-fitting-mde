@@ -83,11 +83,6 @@ impl Factor {
     pub fn rank(&self) -> usize {
         self.s.iter().filter(|&&s| s > self.tol).count()
     }
-
-    pub fn cond(&self) -> f64 {
-        let smin = self.s.iter().cloned().filter(|&s| s > self.tol).fold(f64::INFINITY, f64::min);
-        self.smax / smin
-    }
 }
 
 #[cfg(test)]
