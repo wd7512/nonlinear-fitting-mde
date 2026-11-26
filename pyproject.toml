@@ -1,3 +1,7 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
 [project]
 name = "symbfitrs"
 version = "0.1.0"
@@ -6,9 +10,24 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "William Dennis" }]
-requires-python = ">=3.12"
-dependencies = [
-    "numpy>=2.0",
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.23", "tqdm>=4.60"]
+keywords = ["curve fitting", "nonlinear least squares", "symbolic regression", "levenberg-marquardt"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.urls]
+Repository = "https://github.com/wd7512/symbfitrs"
+
+[dependency-groups]
+# the benchmark in bench/ (never shipped)
+bench = [
     "scipy>=1.13",
     "threadpoolctl>=3.5",
     "pandas>=2.2",
@@ -17,14 +36,9 @@ dependencies = [
     "sympy>=1.13",
     "pydantic>=2.7",
 ]
-
-[project.urls]
-Repository = "https://github.com/wd7512/symbfitrs"
-
-[dependency-groups]
 baselines = [
-    "jax[cpu]>=0.12.1",
-    "optimistix>=0.1.0",
+    "jax[cpu]>=0.12.1; python_version >= '3.12'",
+    "optimistix>=0.1.0; python_version >= '3.12'",
     "pyceres>=2.6",
     "varpropy",
 ]
@@ -33,17 +47,26 @@ dev = [
     "ruff>=0.6",
 ]
 
+[tool.maturin]
+manifest-path = "rust/Cargo.toml"
+python-source = "python"
+module-name = "symbfitrs._core"
+features = ["python"]
+no-default-features = true
+include = [{ path = "LICENSE", format = "sdist" }]
+
 [tool.ruff]
 line-length = 100
 extend-exclude = ["docs"]
-target-version = "py312"
+target-version = "py312"  # the benchmark; the shipped package supports 3.10
+per-file-target-version = { "python/**" = "py310" }
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["bench"]
+known-first-party = ["bench", "symbfitrs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -51,8 +74,9 @@ pythonpath = ["."]
 addopts = "-ra"
 
 [tool.uv]
-package = false  # nothing is shipped until the Python bindings exist (docs/roadmap.md, step 3)
-default-groups = ["dev", "baselines"]
+default-groups = ["dev", "bench", "baselines"]
+# rebuild the extension when the Rust sources change
+cache-keys = [{ file = "pyproject.toml" }, { file = "rust/Cargo.toml" }, { file = "rust/src/**/*.rs" }]
 
 [tool.uv.sources]
 varpropy = { git = "https://github.com/ProfLear/VarProPy.git", rev = "26cba7f573fee857dfbc9ad71e5aac8635cf4f4e" }

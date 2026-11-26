@@ -9,16 +9,25 @@ publish = false
 [lib]
 name = "symbfitrs"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "symbfitrs-bench"
 path = "src/main.rs"
+required-features = ["bench"]
+
+[features]
+default = ["bench"]
+# the Python extension module (built by maturin, see pyproject.toml)
+python = ["dep:pyo3"]
+# symbfitrs-bench and its varpro-crate baseline; varpro 0.14 is built on nalgebra 0.34
+bench = ["dep:varpro", "dep:nalgebra034"]
 
 [dependencies]
 nalgebra = "0.35"
-# baseline only (symbfitrs-bench --solvers varpro_rs); varpro 0.14 is built on nalgebra 0.34
-varpro = "0.14"
-nalgebra034 = { package = "nalgebra", version = "0.34" }
+pyo3 = { version = "0.30", features = ["abi3-py310", "extension-module"], optional = true }
+varpro = { version = "0.14", optional = true }
+nalgebra034 = { package = "nalgebra", version = "0.34", optional = true }
 serde_json = "1"
 libm = "0.2"
 
