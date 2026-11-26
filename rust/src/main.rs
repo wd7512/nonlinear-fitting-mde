@@ -4,8 +4,8 @@
 //!                  [--budgets 1,5,10,25] [--deadline-ms 25] [--max-wall-s 600]
 //!                  [--seed 42] [--no-probe] [--prefix rs_]
 //!
-//! `P.json` is written by `nlfit-mde rust` (Python): SymPy-compiled tapes + data + starts.
-//! Records follow the Python harness schema, so `nlfit-mde` scoring and reports apply.
+//! `P.json` is written by `symreg-rs run CONFIG --rust` (Python): SymPy-compiled tapes + data + starts.
+//! Records follow the Python harness schema, so `symreg-rs` scoring and reports apply.
 //! Single-threaded, FP64; jobs run in a seeded random order with a cooperative per-fit
 //! deadline and a global wall-time cap (unfinished jobs are reported as truncated).
 

@@ -1,4 +1,4 @@
-"""Built-in synthetic MDE fixtures: families x parameter counts, near/far starts.
+"""Built-in synthetic benchmark fixtures: families x parameter counts, near/far starts.
 
 Inputs live on x in [0, 1]; true parameters are drawn from bounded boxes with
 moderate rates / frequencies so fixture generation cannot overflow. Nonlinear

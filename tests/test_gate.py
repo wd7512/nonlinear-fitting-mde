@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from nlfit_mde.rust_bridge.gate import _sample, _side, best_threshold, pair
+from symbolic_regression_rust.rust_bridge.gate import _sample, _side, best_threshold, pair
 
 
 def test_side_is_deterministic_per_group():

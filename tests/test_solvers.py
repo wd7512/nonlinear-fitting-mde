@@ -1,11 +1,11 @@
 import numpy as np
 import pytest
 
-from nlfit_mde import config
-from nlfit_mde.datasets.synthetic import make_problem
-from nlfit_mde.models import SymbolicModel
-from nlfit_mde.problem import Problem
-from nlfit_mde.runner import run_job
+from symbolic_regression_rust import config
+from symbolic_regression_rust.datasets.synthetic import make_problem
+from symbolic_regression_rust.models import SymbolicModel
+from symbolic_regression_rust.problem import Problem
+from symbolic_regression_rust.runner import run_job
 
 
 @pytest.mark.parametrize("solver", config.SOLVER_NAMES)

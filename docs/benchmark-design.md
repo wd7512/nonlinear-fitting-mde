@@ -60,7 +60,7 @@ Secondary:
 - Best loss at each checkpoint, by equation family and parameter count.
 - End-to-end fits/s (completed solver attempts / elapsed time, including per-fit setup).
 
-Keep every result, including failed runs. Do not compare only converged fits. For the future symbolic-regression application, extend the benchmark with incorrect equations and known/reference minima, then measure pairwise equation ranking errors under matched budgets. This first noise-free MDE measures fitting reliability, not scientific equation verification or global optimality on arbitrary data.
+Keep every result, including failed runs. Do not compare only converged fits. For the future symbolic-regression application, extend the benchmark with incorrect equations and known/reference minima, then measure pairwise equation ranking errors under matched budgets. This first noise-free benchmark measures fitting reliability, not scientific equation verification or global optimality on arbitrary data.
 
 ## 5. Pseudocode
 

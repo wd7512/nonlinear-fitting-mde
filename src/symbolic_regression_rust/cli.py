@@ -1,10 +1,10 @@
-"""nlfit-mde: benchmark nonlinear least-squares optimisers under tiny CPU-time budgets.
+"""symreg-rs: benchmark nonlinear least-squares optimisers under tiny CPU-time budgets.
 
-  nlfit-mde run CONFIG [--rust]     fit every problem with every solver, then report
-  nlfit-mde report CONFIG [--rust]  rebuild the report from saved records
-  nlfit-mde inspect CONFIG          validate a config and preview its problems
-  nlfit-mde gate build | run        fixed dev/test cases for changes to the Rust optimiser
-  nlfit-mde gate compare            where does a challenger policy beat the baseline?
+  symreg-rs run CONFIG [--rust]     fit every problem with every solver, then report
+  symreg-rs report CONFIG [--rust]  rebuild the report from saved records
+  symreg-rs inspect CONFIG          validate a config and preview its problems
+  symreg-rs gate build | run        fixed dev/test cases for changes to the Rust optimiser
+  symreg-rs gate compare            where does a challenger policy beat the baseline?
 
 CONFIG is a TOML path or a config name, e.g. `nist_strd` for configs/benchmarks/nist_strd.toml.
 Results go to results/<name>/ (Python solvers) or results/<name>_rust/ (Rust optimiser, merged
@@ -34,7 +34,7 @@ def resolve_config(name: str) -> Path:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(
-        prog="nlfit-mde", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+        prog="symreg-rs", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("run", "report", "inspect"):

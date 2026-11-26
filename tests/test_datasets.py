@@ -3,8 +3,8 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from nlfit_mde.datasets import build_problems
-from nlfit_mde.experiment import ExperimentConfig, load_config
+from symbolic_regression_rust.datasets import build_problems
+from symbolic_regression_rust.experiment import ExperimentConfig, load_config
 
 
 def _cfg(**ds):
@@ -81,7 +81,7 @@ def test_misra1a_reference_from_certified_sse(root):
 
 
 @pytest.mark.parametrize(
-    "name", ["mde_synthetic.toml", "examples/nist_misra1a.toml", "examples/damped_curves.toml"]
+    "name", ["synthetic_smoke.toml", "examples/nist_misra1a.toml", "examples/damped_curves.toml"]
 )
 def test_shipped_configs_build(root, name):
     cfg = load_config(root / "configs" / name)

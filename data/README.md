@@ -87,7 +87,7 @@ starts.n_random = 2                  # uniform draws from bounds (also sets Adam
 Check a new config before running it:
 
 ```bash
-uv run nlfit-mde inspect configs/my_experiment.toml
+uv run symreg-rs inspect configs/my_experiment.toml
 ```
 
 It validates the file, prints each model (parameters, detected linear parameters),

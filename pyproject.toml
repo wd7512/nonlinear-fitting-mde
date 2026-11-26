@@ -1,5 +1,5 @@
 [project]
-name = "nlfit-mde"
+name = "symbolic-regression-rust"
 version = "0.1.0"
 description = "Benchmark nonlinear least-squares optimisers on millisecond CPU budgets."
 readme = "README.md"
@@ -19,10 +19,10 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/wd7512/nonlinear-fitting-mde"
+Repository = "https://github.com/wd7512/symbolic-regression-rust"
 
 [project.scripts]
-nlfit-mde = "nlfit_mde.cli:main"
+symreg-rs = "symbolic_regression_rust.cli:main"
 
 [project.optional-dependencies]
 parquet = [
@@ -45,7 +45,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["nlfit_mde"]
+known-first-party = ["symbolic_regression_rust"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

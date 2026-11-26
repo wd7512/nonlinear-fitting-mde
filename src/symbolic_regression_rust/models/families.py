@@ -1,4 +1,4 @@
-"""Built-in equation families (hand-written kernels) used by the synthetic MDE.
+"""Built-in equation families (hand-written kernels) used by the synthetic benchmark.
 
 theta layout for mixtures: [a_1..a_K, b_1..b_K], conditionally linear in a.
 """

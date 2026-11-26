@@ -1,7 +1,7 @@
 # Gate baseline, 2026-11-26
 
 Rust policies on the frozen gate tiers, before any change to `auto`. Apple Silicon, one thread.
-Tier files are not committed (they embed third-party data); `nlfit-mde gate build` recreates
+Tier files are not committed (they embed third-party data); `symreg-rs gate build` recreates
 them from local runs. References depend on those runs, so check the hashes before comparing.
 
 ```

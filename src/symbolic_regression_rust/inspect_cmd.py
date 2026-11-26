@@ -1,4 +1,4 @@
-"""``nlfit-mde inspect``: validate a config and show what would be fitted (no timing)."""
+"""``symreg-rs inspect``: validate a config and show what would be fitted (no timing)."""
 
 from __future__ import annotations
 

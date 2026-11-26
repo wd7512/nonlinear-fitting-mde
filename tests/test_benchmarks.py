@@ -11,10 +11,14 @@ import pandas as pd
 import pytest
 from scipy.optimize import least_squares
 
-from nlfit_mde.benchmarks import fitbenchmarking, mgh, nist
-from nlfit_mde.models import SymbolicModel, VectorResidualModel, python_function_model
-from nlfit_mde.models.families import make_family
-from nlfit_mde.scoring import tolerance
+from symbolic_regression_rust.benchmarks import fitbenchmarking, mgh, nist
+from symbolic_regression_rust.models import (
+    SymbolicModel,
+    VectorResidualModel,
+    python_function_model,
+)
+from symbolic_regression_rust.models.families import make_family
+from symbolic_regression_rust.scoring import tolerance
 
 EXT = Path(__file__).resolve().parents[1] / "data" / "external"
 
@@ -156,7 +160,7 @@ def test_back_to_back_exponential_stable():
         "name=BackToBackExponential,I=100,A=1,B=0.05,X0=1000,S=5"
     )
     x = np.linspace(800, 1600, 4000)  # B = 0.05: long right tail
-    from nlfit_mde.models.symbolic import compile_sympy
+    from symbolic_regression_rust.models.symbolic import compile_sympy
 
     m = SymbolicModel(
         "b",
@@ -186,7 +190,7 @@ def test_fitbenchmarking_scan():
 def test_sagefit_candidates_load():
     import json
 
-    from nlfit_mde.benchmarks.sagefit import BANK
+    from symbolic_regression_rust.benchmarks.sagefit import BANK
 
     bank = json.loads((EXT / "sagefit" / BANK).read_text())
     assert len(bank) == 20 and all(len(p["events"]) == 10 for p in bank)

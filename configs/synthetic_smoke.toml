@@ -1,6 +1,6 @@
-# The original minimum decisive experiment (docs/MDE.md): 3 families x 4 sizes x
+# The original minimum decisive experiment (docs/benchmark-design.md): 3 families x 4 sizes x
 # near/far starts x 6 solvers = 144 fits, 25 ms each, single thread.
-name = "mde_synthetic"
+name = "synthetic_smoke"
 seed = 42
 solvers = ["adam", "lbfgs", "gauss_newton", "lm", "trf", "varpro_lm"]
 budgets_ms = [1, 5, 10, 25]

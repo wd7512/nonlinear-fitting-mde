@@ -1,7 +1,7 @@
 """Experiment configuration (TOML), validated with pydantic.
 
 One experiment = solver/budget settings + a list of datasets. A dataset is either
-the built-in synthetic MDE grid or a table of curves on disk plus one or more
+the built-in synthetic benchmark grid or a table of curves on disk plus one or more
 models to fit to every curve. See ``configs/`` and ``data/README.md``.
 """
 
