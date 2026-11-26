@@ -81,6 +81,33 @@ configs and data you trust.
 
 The original experiment design is in [`docs/MDE.md`](docs/MDE.md).
 
+## Optimizer comparison
+
+Success rate on the shared synthetic benchmark (higher is better):
+
+![Graph comparing optimizer success rate against time budget. Rust auto_v1 and three SciPy methods are shown at 1, 5, 10, 25, and 100 milliseconds.](docs/baseline/optimizer-success-rate.png)
+
+Success means reaching normalized MSE `≤ 1e-6` within the budget. The benchmark
+uses the same 24 generated fits for each optimizer: three equation families,
+four parameter counts (2, 8, 32, 96), and near/far starting points. Rust `auto_v1`
+is the repository's current Rust `auto` policy; it is the unchanged baseline,
+not the unmerged opt-in optimization PR. SciPy methods use this project's fixed
+least-squares tolerances and parameter scaling, rather than SciPy's unmodified
+library defaults. Results are from one run on Apple Silicon with Python 3.12.14,
+NumPy 2.5.5, and SciPy 1.18.1; each percentage is over 24 fits. These
+machine-specific results are illustrative, not a general performance claim.
+
+Reproduce the comparison with:
+
+```bash
+uv run nlfit-mde run readme_comparison
+uv run nlfit-mde run readme_comparison --rust
+```
+
+The first command records the three SciPy methods; the second adds the Rust
+baseline and generates the merged report. The config is
+[`configs/readme_comparison.toml`](configs/readme_comparison.toml).
+
 ## Development
 
 ```bash
