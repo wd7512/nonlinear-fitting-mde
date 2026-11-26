@@ -28,13 +28,19 @@ impl Default for Opts {
 }
 
 pub fn solve<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Status {
-    match run(f, x0, o) {
+    solve_with_scratch::<F, false>(f, x0, o)
+}
+
+pub(crate) fn solve_with_scratch<F: Lsq, const SCALE: bool>(
+    f: &mut F, x0: &DVector<f64>, o: &Opts,
+) -> Status {
+    match run::<F, SCALE>(f, x0, o) {
         Ok(s) => s,
         Err(Stop::Deadline) => Status::Deadline,
     }
 }
 
-fn run<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
+fn run<F: Lsq, const SCALE: bool>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
     let (m, n) = (f.m(), f.n());
     let mut x = x0.clone();
     let mut r = DVector::zeros(m);
@@ -66,7 +72,13 @@ fn run<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
         for j in 0..n {
             let cn = jac.column(j).norm();
             d[j] = d[j].max(if cn > 0.0 { cn } else { 1.0 });
-            js.column_mut(j).copy_from(&(jac.column(j) / d[j]));
+            if SCALE {
+                let mut col = js.column_mut(j);
+                col.copy_from(&jac.column(j));
+                col.unscale_mut(d[j]);
+            } else {
+                js.column_mut(j).copy_from(&(jac.column(j) / d[j]));
+            }
         }
         // gradient (cosine) test on the scaled problem
         let rn = r.norm();
