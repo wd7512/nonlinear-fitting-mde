@@ -29,7 +29,6 @@ pub struct Tracker {
     pub n_nonfinite: usize,
     pub iter_ns: Vec<u64>,
     last_iter: Instant,
-    pub events: Vec<(f64, String)>, // solver switches etc. (ms, what)
 }
 
 impl Tracker {
@@ -55,7 +54,6 @@ impl Tracker {
             n_nonfinite: 0,
             iter_ns: Vec::new(),
             last_iter: now,
-            events: Vec::new(),
         }
     }
 
@@ -66,10 +64,6 @@ impl Tracker {
 
     pub fn elapsed_ms(&self) -> f64 {
         self.elapsed_ns() as f64 / 1e6
-    }
-
-    pub fn remaining_ms(&self) -> f64 {
-        (self.deadline_ns as f64 - self.elapsed_ns() as f64) / 1e6
     }
 
     /// Cooperative deadline check, done before starting any evaluation.
@@ -90,11 +84,6 @@ impl Tracker {
         let now = Instant::now();
         self.iter_ns.push((now - self.last_iter).as_nanos() as u64);
         self.last_iter = now;
-    }
-
-    pub fn event(&mut self, what: &str) {
-        let t = self.elapsed_ms();
-        self.events.push((t, what.to_string()));
     }
 
     /// Time an evaluation: `kind` true = residual (fev), false = Jacobian (jev).

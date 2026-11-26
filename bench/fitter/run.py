@@ -16,7 +16,7 @@ from pathlib import Path
 from ..watchdog import merge_shards
 
 RUST_DIR = Path(__file__).resolve().parents[2] / "rust"
-BINARY = RUST_DIR / "target" / "release" / "nlfit-rs"
+BINARY = RUST_DIR / "target" / "release" / "symbfitrs-bench"
 
 
 def ensure_binary() -> Path:
@@ -72,12 +72,12 @@ def bench(
     jobs: int = 1,
     timeout: float | None = None,
 ) -> None:
-    """Run ``nlfit-rs bench``; with ``jobs`` > 1, one process per share of the problems."""
+    """Run ``symbfitrs-bench bench``; with ``jobs`` > 1, one process per share of the problems."""
     binary = str(ensure_binary())
 
     def cmd(problems: Path, out: Path) -> list[str]:
         return [binary, "bench", "--problems", str(problems), "--out", str(out),
-                "--policies", "auto", "--budgets", ",".join(f"{b:g}" for b in budgets),
+                "--budgets", ",".join(f"{b:g}" for b in budgets),
                 *extra]  # fmt: skip
 
     if jobs <= 1:
@@ -99,7 +99,7 @@ def bench(
         for part in parts:
             part.unlink(missing_ok=True)
     if any(codes):
-        sys.exit(f"nlfit-rs exited with codes {codes}")
+        sys.exit(f"symbfitrs-bench exited with codes {codes}")
     merge_shards(outs, records)
 
 

@@ -53,7 +53,7 @@ TIERS = {
     "test": ("test", SUITES, 150),
 }
 RANK_CURVES = {"sagefit_spb": None, "stringer2019_gratings": 100}  # None = all curves
-FITTER = "rs_auto"  # label nlfit-rs gives its records
+FITTER = ("symbfitrs", "rs_auto")  # record labels; rs_auto = runs before the rename
 BASELINE = "baseline"
 
 
@@ -230,7 +230,7 @@ def run(tier: str, baseline: Path | None = None, out: Path | None = None) -> Non
     bench(problems, out, budgets)
     df = score_gate(out, budgets)
     if baseline is not None:
-        old = score_gate(baseline, budgets).query("solver == @FITTER")
+        old = score_gate(baseline, budgets).query("solver in @FITTER")
         if set(zip(old.problem, old.start, strict=True)) != set(
             zip(df.problem, df.start, strict=True)
         ):

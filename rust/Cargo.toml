@@ -1,17 +1,17 @@
 [package]
-name = "nlfit-core"
+name = "symbfitrs"
 version = "0.1.0"
 edition = "2021"
-description = "Single-threaded nonlinear least-squares optimiser (VarPro + LM) for symbolic-regression-rust"
+description = "Fast nonlinear least-squares fitter (variable projection + LM)"
 license = "MIT"
 publish = false
 
 [lib]
-name = "nlfit_core"
+name = "symbfitrs"
 path = "src/lib.rs"
 
 [[bin]]
-name = "nlfit-rs"
+name = "symbfitrs-bench"
 path = "src/main.rs"
 
 [dependencies]
