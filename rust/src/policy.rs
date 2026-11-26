@@ -41,10 +41,56 @@ impl Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tape::Program;
+    use serde_json::json;
 
     #[test]
     fn v1_is_an_exact_alias_for_auto() {
         assert_eq!(Policy::parse("auto_v1").unwrap(), Policy::parse("auto").unwrap());
+    }
+
+    #[test]
+    fn revisions_keep_the_same_loss_history_and_parameters() {
+        // a * exp(b * x) + c, with a and c projected. Constant x makes the
+        // two basis columns rank deficient and exercises the fallback path.
+        let full = json!({
+            "ops": [
+                ["param", 0], ["param", 1], ["param", 2], ["var", 0], ["mul", 2, 3],
+                ["exp", 4], ["mul", 0, 5], ["add", 6, 1], ["mul", 6, 3], ["const", 1.0]
+            ],
+            "outputs": [[7], [5], [9], [8]]
+        });
+        let mut residual = full.clone();
+        residual["outputs"] = json!([[7]]);
+        let sep = json!({
+            "ops": [
+                ["var", 0], ["const", 0.0], ["param", 2], ["mul", 0, 2], ["exp", 3], ["const", 1.0]
+            ],
+            "outputs": [[1], [4], [5]]
+        });
+        let programs = [residual, full, sep].map(|v| Program::from_json(&v).unwrap());
+        for x in [[0.0, 0.5, 1.0, 2.0, 3.0], [0.5; 5]] {
+            let case = json!({
+                "p": 3, "m": 5, "x": [x], "y": [4.0, 3.6, 3.3, 2.9, 2.6],
+                "denom": 1.0, "linear_idx": [0, 1], "prog_f": 0, "prog_fj": 1, "prog_sep": 2,
+                "starts": [["initial", [1.0, 1.0, -0.1]]]
+            });
+            let fit = |version| {
+                let mut prob = Problem::from_json(&case, &programs).unwrap();
+                let mut tracker = Tracker::new(1000.0, &[], prob.inv_scale);
+                let (status, path) = BenchmarkPolicy::parse(version)
+                    .unwrap()
+                    .run(&mut prob, &[1.0, 1.0, -0.1], &mut tracker);
+                assert_eq!(path, "varpro");
+                assert_ne!(status, Status::Deadline);
+                (status, tracker.best_theta, tracker.hist_loss, tracker.nfev, tracker.njev)
+            };
+            let expected = fit("auto_v1");
+            assert!(expected.4 > 0);
+            for version in ["auto_v1.1", "auto_v1.2", "auto_v1.3", "auto_v1.4", "auto_v1.5"] {
+                assert_eq!(fit(version), expected, "{version}");
+            }
+        }
     }
 }
 
