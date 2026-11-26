@@ -1,5 +1,4 @@
-"""The README figure: share of fits reaching the target at 1, 5 and 25 ms, mean of six suites,
-one row per solver.
+"""The README figure: success against time for every solver, averaged over the six suites.
 
   uv run python -m bench.figure    # after `bench run SUITE` and `bench run SUITE --fitter`
 
@@ -28,14 +27,22 @@ LABELS = {  # display names; * marks the separable-only solvers
     "ceres_lm": "Ceres LM", "sagefit": "SAGE-Fit",
     "varpropy": "VarProPy *", "varpro_rs": "varpro crate (Rust) *",
 }  # fmt: skip
-BUDGETS = (1, 5, 25)  # ms, one marker each
+BUDGETS = (1, 5, 25)  # ms, tabulated
+# colour = library (categorical slot), dash = solver within it
+STYLE = {
+    "symbfitrs": (0, "-"),
+    "scipy_lm": (1, "-"), "scipy_trf": (1, "--"), "scipy_dogbox": (1, ":"),
+    "optx_lm": (2, "-"), "optx_indirect_lm": (2, "--"), "optx_dogleg": (2, ":"),
+    "optx_gauss_newton": (2, "-."),
+    "ceres_lm": (3, "-"), "sagefit": (4, "-"), "varpro_rs": (5, "-"), "varpropy": (5, "--"),
+}  # fmt: skip
 GRID = np.logspace(-1, np.log10(25), 300)  # ms; 25 ms is a checkpoint in every suite
-# categorical slots 1-3 (one per budget) and text inks, per mode (validated light and dark)
+# categorical slots (blue, orange, aqua, yellow, magenta, violet) and text inks, per mode
 THEMES = {
-    "light": dict(series=["#257de0", "#f47230", "#00b894"], surface="#ffffff",
-                  text="#191919", muted="#666666", grid="#e6e6e6"),
-    "dark": dict(series=["#338ced", "#e76624", "#00a888"], surface="#0d1117",
-                 text="#efefef", muted="#9c9c9c", grid="#30363d"),
+    "light": dict(series=["#257de0", "#f47230", "#00b894", "#f2a600", "#ee7fac", "#6a4ce2"],
+                  surface="#ffffff", text="#191919", muted="#666666", grid="#e6e6e6"),
+    "dark": dict(series=["#338ced", "#e76624", "#00a888", "#d28e05", "#e24d8b", "#9887ef"],
+                 surface="#0d1117", text="#efefef", muted="#9c9c9c", grid="#30363d"),
 }  # fmt: skip
 
 
@@ -61,32 +68,33 @@ def suite_curves(suite: str, results: Path) -> dict[str, np.ndarray]:
     return out
 
 
-def draw(at: dict[str, list[float]], path: Path, theme: dict) -> None:
-    order = sorted(at, key=lambda s: at[s][1])  # by 5 ms success, best at the top
-    fig, ax = plt.subplots(figsize=(7.5, 0.3 * len(order) + 1.3))
+def draw(curves: dict[str, np.ndarray], path: Path, theme: dict) -> None:
+    fig, ax = plt.subplots(figsize=(9.5, 4.2))
     fig.patch.set_facecolor(theme["surface"])
     ax.set_facecolor(theme["surface"])
-    for row, s in enumerate(order):
-        ax.plot([min(at[s]), max(at[s])], [row, row], color=theme["grid"], linewidth=2, zorder=1)
-    for k, (b, color) in enumerate(zip(BUDGETS, theme["series"], strict=True)):
-        ax.scatter([at[s][k] for s in order], range(len(order)), s=55, color=color, zorder=2,
-                   edgecolors=theme["surface"], linewidths=1.5, label=f"{b} ms")  # fmt: skip
-    ax.set_yticks(range(len(order)), [LABELS.get(s, s) for s in order])
-    ax.set_xlim(0, 1)
-    ax.set_ylim(-0.6, len(order) - 0.4)
-    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
-    ax.grid(True, axis="x", color=theme["grid"], linewidth=0.8)
-    ax.set_axisbelow(True)
-    for side in ("top", "right", "left", "bottom"):
+    i5 = min(np.searchsorted(GRID, 5), GRID.size - 1)
+    for solver in sorted(curves, key=lambda s: -curves[s][i5]):  # legend in 5 ms order
+        slot, dash = STYLE.get(solver, (0, ":"))
+        top = solver == "symbfitrs"
+        ax.plot(GRID, curves[solver], color=theme["series"][slot], linestyle=dash,
+                linewidth=2.6 if top else 1.6, label=LABELS.get(solver, solver),
+                zorder=3 if top else 2)  # fmt: skip
+    ax.set_xscale("log")
+    ax.set_xlim(GRID[0], GRID[-1])
+    ax.set_ylim(0, 1)
+    ax.set_xticks([0.1, 0.3, 1, 3, 10, 25], ["0.1", "0.3", "1", "3", "10", "25 ms"])
+    ax.minorticks_off()
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
+    ax.grid(True, axis="y", color=theme["grid"], linewidth=0.8)
+    for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(theme["muted"])
     ax.tick_params(colors=theme["muted"], labelsize=9, length=0)
-    for tick, s in zip(ax.get_yticklabels(), order, strict=True):
-        tick.set_color(theme["text"])
-        tick.set_fontweight("bold" if s == "symbfitrs" else "normal")
-    ax.set_title("Fits that reach the target, mean of six benchmark suites",
-                 loc="left", color=theme["text"], fontsize=11, pad=24)  # fmt: skip
-    ax.legend(frameon=False, loc="lower left", bbox_to_anchor=(0, 1), ncol=3, fontsize=9,
-              labelcolor=theme["text"], handletextpad=0.2, borderaxespad=0.1)  # fmt: skip
+    ax.set_xlabel("time per fit (log scale)", color=theme["muted"], fontsize=9)
+    ax.set_title("Fits that reach the target, mean of six benchmark suites", loc="left",
+                 color=theme["text"], fontsize=11, pad=12)  # fmt: skip
+    ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9,
+              labelcolor=theme["text"], handlelength=2.6)  # fmt: skip
     fig.text(0.01, 0.01, "* variable projection only: misses every problem without a separable form",
              color=theme["muted"], fontsize=8)  # fmt: skip
     fig.tight_layout(rect=(0, 0.03, 1, 1))
@@ -98,13 +106,12 @@ def main(results: Path = Path("results"), out: Path = Path("docs")) -> None:
     per_suite = [suite_curves(s, results) for s in SUITES]
     solvers = [s for s in per_suite[0] if all(s in c for c in per_suite)]
     mean = {s: np.mean([c[s] for c in per_suite], axis=0) for s in solvers}
-    idx = [min(np.searchsorted(GRID, b), GRID.size - 1) for b in BUDGETS]
-    at = {s: [float(mean[s][i]) for i in idx] for s in solvers}
     for mode, theme in THEMES.items():
-        draw(at, out / f"benchmark-{mode}.png", theme)
+        draw(mean, out / f"benchmark-{mode}.png", theme)
+    idx = [min(np.searchsorted(GRID, b), GRID.size - 1) for b in BUDGETS]
     print("| solver | " + " | ".join(f"{b} ms" for b in BUDGETS) + " |\n|:--|--:|--:|--:|")
-    for s in sorted(solvers, key=lambda s: -at[s][1]):
-        print(f"| {LABELS.get(s, s)} | " + " | ".join(f"{v:.1%}" for v in at[s]) + " |")
+    for s in sorted(solvers, key=lambda s: -mean[s][idx[1]]):
+        print(f"| {LABELS.get(s, s)} | " + " | ".join(f"{mean[s][i]:.1%}" for i in idx) + " |")
 
 
 if __name__ == "__main__":
