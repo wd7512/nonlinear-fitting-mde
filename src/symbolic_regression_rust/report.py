@@ -361,7 +361,7 @@ def build_report(
         f"Total invocation time (including reporting): {time.perf_counter() - t_invocation:.2f} s."
     )
 
-    md = [f"# Nonlinear fitting MDE — {meta.get('experiment', '')}", ""]
+    md = [f"# Symbolic regression Rust — {meta.get('experiment', '')}", ""]
     for title, body in sections:
         md += [f"## {title}", "", body, ""]
     md += ["## Notes", ""] + [f"- {n}" for n in notes]

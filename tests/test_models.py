@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from nlfit_mde import config
-from nlfit_mde.datasets.synthetic import make_problem
-from nlfit_mde.models import SymbolicModel
+from symbolic_regression_rust import config
+from symbolic_regression_rust.datasets.synthetic import make_problem
+from symbolic_regression_rust.models import SymbolicModel
 
 
 def fd_jacobian(model, theta, h=1e-6):
@@ -41,7 +41,7 @@ def test_true_parameters_give_zero_loss(synthetic):
 
 
 def test_family_separable_matches_generic(synthetic):
-    from nlfit_mde.models.base import Model
+    from symbolic_regression_rust.models.base import Model
 
     for pb in synthetic:
         m = pb.model

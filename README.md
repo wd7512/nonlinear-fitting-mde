@@ -1,6 +1,6 @@
-# nlfit-mde
+# symbolic-regression-rust
 
-How fast can a CPU fit a nonlinear equation? `nlfit-mde` races least-squares optimisers on
+How fast can a CPU fit a nonlinear equation? `symreg-rs` races least-squares optimisers on
 millisecond budgets (1, 5, 10, 25, 100 ms per fit) across standard benchmark suites and your
 own data, and reports how often each one reaches the target in time.
 
@@ -15,8 +15,8 @@ Needs [uv](https://docs.astral.sh/uv/); the Rust optimiser also needs
 
 ```bash
 uv sync
-uv run nlfit-mde run mde_synthetic          # 144 fits on synthetic equations, a few seconds
-uv run nlfit-mde run mde_synthetic --rust   # the same problems with the Rust optimiser
+uv run symreg-rs run synthetic_smoke          # 144 fits on synthetic equations, a few seconds
+uv run symreg-rs run synthetic_smoke --rust   # the same problems with the Rust optimiser
 ```
 
 Results go to `results/<name>/summary.md` (tables), `records.jsonl` (every fit with its loss
@@ -26,11 +26,11 @@ history) and `success_vs_time.png`.
 
 | command | what it does |
 |---|---|
-| `nlfit-mde run CONFIG [--rust]` | fit every problem with every optimiser, then report |
-| `nlfit-mde report CONFIG [--rust]` | rebuild the report from saved records |
-| `nlfit-mde inspect CONFIG` | validate a config and preview its problems |
-| `nlfit-mde gate build` / `gate run` | fixed dev/test cases for changes to the Rust optimiser |
-| `nlfit-mde gate compare --challenger lm` | where another Rust policy beats `auto`, by problem feature |
+| `symreg-rs run CONFIG [--rust]` | fit every problem with every optimiser, then report |
+| `symreg-rs report CONFIG [--rust]` | rebuild the report from saved records |
+| `symreg-rs inspect CONFIG` | validate a config and preview its problems |
+| `symreg-rs gate build` / `gate run` | fixed dev/test cases for changes to the Rust optimiser |
+| `symreg-rs gate compare --challenger lm` | where another Rust policy beats `auto`, by problem feature |
 
 `run --jobs` shares the fits between 4 single-threaded workers. It is much faster, but the
 timings get noisier, so use one worker when comparing speeds.
@@ -42,7 +42,7 @@ timings get noisier, so use one worker when comparing speeds.
 
 ```bash
 uv run python scripts/fetch_benchmarks.py        # downloads into data/external/
-uv run nlfit-mde run nist_strd
+uv run symreg-rs run nist_strd
 ```
 
 | config | data | success means |
@@ -79,7 +79,7 @@ configs and data you trust.
 - **The Rust optimiser** runs on equations exported from SymPy as compiled instruction lists.
   Problems without a symbolic form are skipped there.
 
-The original experiment design is in [`docs/MDE.md`](docs/MDE.md).
+The original experiment design is in [`docs/benchmark-design.md`](docs/benchmark-design.md).
 
 ## Optimizer comparison
 
@@ -100,8 +100,8 @@ machine-specific results are illustrative, not a general performance claim.
 Reproduce the comparison with:
 
 ```bash
-uv run nlfit-mde run readme_comparison
-uv run nlfit-mde run readme_comparison --rust
+uv run symreg-rs run readme_comparison
+uv run symreg-rs run readme_comparison --rust
 ```
 
 The first command records the three SciPy methods; the second adds the Rust
@@ -118,7 +118,7 @@ cargo test --release --manifest-path rust/Cargo.toml
 
 To change what the Rust optimiser does by default, compare on the gate (`--tier quick`, `dev`,
 `test`, `rank`). The acceptance margins are fixed in advance in
-`src/nlfit_mde/rust_bridge/gate.py`.
+`src/symbolic_regression_rust/rust_bridge/gate.py`.
 
 ## License
 

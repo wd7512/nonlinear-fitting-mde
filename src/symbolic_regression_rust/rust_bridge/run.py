@@ -1,4 +1,4 @@
-"""``nlfit-mde run CONFIG --rust``: export a config's problems, run the Rust optimiser, report.
+"""``symreg-rs run CONFIG --rust``: export a config's problems, run the Rust optimiser, report.
 
 Problems are built exactly as the Python worker builds them (same config, same seed), so
 Rust records are merged with a Python run of the same config when one exists and scored

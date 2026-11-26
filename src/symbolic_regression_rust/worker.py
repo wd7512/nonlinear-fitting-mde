@@ -1,6 +1,6 @@
 """Benchmark worker: one process runs every fit and streams JSONL records.
 
-Run under the parent watchdog (``nlfit_mde.cli``), which sets single-thread BLAS
+Run under the parent watchdog (``symbolic_regression_rust.cli``), which sets single-thread BLAS
 environment variables before this process imports numpy. Records are flushed one
 per line so partial results survive if the watchdog kills the worker.
 """

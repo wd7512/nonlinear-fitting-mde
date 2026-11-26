@@ -1,4 +1,4 @@
-//! A fitting problem bound to its data, loaded from the JSON exported by `nlfit-mde rust`.
+//! A fitting problem bound to its data, loaded from the JSON exported by `symreg-rs run CONFIG --rust`.
 //!
 //! residual r(θ) = w ⊙ (f(x; θ) − y); loss = Σ r² / (m · denom).
 //! For separable models f = Φ(β) α + c(β), the `sep` program outputs [c, Φ_0, …, Φ_{k-1}]

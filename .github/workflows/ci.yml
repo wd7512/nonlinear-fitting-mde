@@ -15,7 +15,7 @@ jobs:
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run pytest
-      - run: uv run nlfit-mde run mde_synthetic --no-plot
+      - run: uv run symreg-rs run synthetic_smoke --no-plot
 
   rust:
     runs-on: ubuntu-latest

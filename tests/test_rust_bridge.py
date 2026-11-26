@@ -4,12 +4,12 @@ import numpy as np
 import pytest
 from scipy.special import erf, erfc
 
-from nlfit_mde.benchmarks import stringer2019
-from nlfit_mde.models import SymbolicModel
-from nlfit_mde.models.families import make_family
-from nlfit_mde.models.symbolic import _np_expwerfc, compile_sympy
-from nlfit_mde.rust_bridge.export import symbolic_form
-from nlfit_mde.rust_bridge.tape import model_programs
+from symbolic_regression_rust.benchmarks import stringer2019
+from symbolic_regression_rust.models import SymbolicModel
+from symbolic_regression_rust.models.families import make_family
+from symbolic_regression_rust.models.symbolic import _np_expwerfc, compile_sympy
+from symbolic_regression_rust.rust_bridge.export import symbolic_form
+from symbolic_regression_rust.rust_bridge.tape import model_programs
 
 UN = {
     "neg": np.negative, "sqrt": np.sqrt, "exp": np.exp, "log": np.log, "sin": np.sin,

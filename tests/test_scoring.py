@@ -1,7 +1,12 @@
 import numpy as np
 import pandas as pd
 
-from nlfit_mde.scoring import best_at, best_so_far_curve, fill_reference, time_to_target
+from symbolic_regression_rust.scoring import (
+    best_at,
+    best_so_far_curve,
+    fill_reference,
+    time_to_target,
+)
 
 
 def test_late_results_not_credited_early():

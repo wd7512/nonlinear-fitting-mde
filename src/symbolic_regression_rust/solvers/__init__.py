@@ -1,4 +1,4 @@
-"""Solver registry (IDs A-F from the MDE)."""
+"""Solver registry (IDs A-F in the original benchmark design)."""
 
 from __future__ import annotations
 

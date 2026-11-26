@@ -2,7 +2,7 @@
 name = "nlfit-core"
 version = "0.1.0"
 edition = "2021"
-description = "Single-threaded nonlinear least-squares optimiser (VarPro + LM) for nlfit-mde"
+description = "Single-threaded nonlinear least-squares optimiser (VarPro + LM) for symbolic-regression-rust"
 license = "MIT"
 publish = false
 

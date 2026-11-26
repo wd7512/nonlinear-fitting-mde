@@ -222,7 +222,7 @@ def _run_policies(tier: str, policies: list[str], budgets, out: Path | None) -> 
 
     problems = GATE_DIR / f"{tier}.json"
     if not problems.exists():
-        raise SystemExit(f"{problems} missing: run `nlfit-mde gate build` first")
+        raise SystemExit(f"{problems} missing: run `symreg-rs gate build` first")
     out = out or Path("results") / "gate" / f"{tier}_{time.strftime('%Y%m%d-%H%M%S')}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
     bench(problems, out, ",".join(policies), budgets)

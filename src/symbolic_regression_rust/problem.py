@@ -14,7 +14,7 @@ LOSS_NORMS = ("mean_square", "variance", "sum_of_squares", "mse")
 def loss_denominator(y_eff: np.ndarray, norm: str) -> float:
     """Denominator of the loss: loss = sum(r^2) / m / denominator.
 
-    mean_square     mean(y^2)   (MDE default: normalised MSE)
+    mean_square     mean(y^2)   (benchmark default: normalised MSE)
     variance        var(y)      (NMSE as used by SRBench / SAGE-Fit)
     sum_of_squares  1/m         (loss = plain sum of squares; residual-only problems, MGH)
     mse             1           (plain mean squared error, in the data's units)

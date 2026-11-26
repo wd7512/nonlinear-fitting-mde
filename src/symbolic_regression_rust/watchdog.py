@@ -60,7 +60,13 @@ def run_worker(
     t0 = time.perf_counter()
     procs = []
     for i, out in enumerate(outs):
-        cmd = [sys.executable, "-m", "nlfit_mde.worker", "--config", str(config_path)]
+        cmd = [
+            sys.executable,
+            "-m",
+            "symbolic_regression_rust.worker",
+            "--config",
+            str(config_path),
+        ]
         cmd += ["--out", str(out), "--shard", f"{i}/{len(outs)}"]
         procs.append(subprocess.Popen(cmd, env=env))
     killed = False
