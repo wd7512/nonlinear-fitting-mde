@@ -4,7 +4,7 @@ A fast CPU fitter for nonlinear equations, written in Rust, for symbolic regress
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark-dark.png">
-  <img alt="Share of fits reaching the target at 1, 5 and 25 ms for twelve solvers: symbfitrs 72%, 86%, 88%; best other at 5 ms is SciPy lm at 47%, 71%, 86%" src="docs/benchmark-light.png">
+  <img alt="Share of fits reaching the target against time per fit for twelve solvers: symbfitrs 72% at 1 ms and 86% at 5 ms; the best other, SciPy lm, 47% and 71%" src="docs/benchmark-light.png">
 </picture>
 
 Six suites (NIST StRD, Moré–Garbow–Hillstrom, FitBenchmarking, SAGE-Fit, Stringer 2019, synthetic up to 99 parameters); one thread per fit; every solver at its library defaults (SciPy, Optimistix, Ceres via pyceres, SAGE-Fit, VarProPy, the Rust `varpro` crate; see `bench/baselines.py`); compile time not counted. SAGE-Fit data is Python code the benchmark executes, so fetch only data you trust. Needs [uv](https://docs.astral.sh/uv/) and [cargo](https://rustup.rs/).
