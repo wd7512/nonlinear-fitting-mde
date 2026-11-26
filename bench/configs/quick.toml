@@ -1,0 +1,9 @@
+# Seconds-long check that the harness runs end to end (used by CI).
+name = "quick"
+budgets_ms = [1, 5, 10, 25]
+targets = [1e-6, 1e-10]
+
+[[datasets]]
+kind = "synthetic"
+families = ["exp_mixture", "sin_mixture", "coupled_tanh"]
+param_counts = [2, 8, 32]

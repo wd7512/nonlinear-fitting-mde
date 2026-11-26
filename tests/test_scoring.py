@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from symbolic_regression_rust.scoring import (
+from bench.scoring import (
     best_at,
     best_so_far_curve,
     fill_reference,
