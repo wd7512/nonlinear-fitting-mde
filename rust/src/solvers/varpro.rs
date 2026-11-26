@@ -28,6 +28,7 @@ pub struct VarPro<'a> {
     trial: Option<Proj>,
     current: Option<Proj>,
     reuse_basis: bool,
+    reuse_theta: bool,
 }
 
 impl<'a> VarPro<'a> {
@@ -42,6 +43,7 @@ impl<'a> VarPro<'a> {
             trial: None,
             current: None,
             reuse_basis: false,
+            reuse_theta: false,
             prob,
             tr,
         }
@@ -49,6 +51,10 @@ impl<'a> VarPro<'a> {
 
     pub(crate) fn reuse_basis(&mut self) {
         self.reuse_basis = true;
+    }
+
+    pub(crate) fn reuse_theta(&mut self) {
+        self.reuse_theta = true;
     }
 
     pub fn beta_of(&self, theta: &[f64]) -> DVector<f64> {
@@ -137,14 +143,21 @@ impl Lsq for VarPro<'_> {
         let t = std::time::Instant::now();
         let cur = self.current.as_ref().expect("jacobian before an accepted residual");
         let prob = &mut *self.prob;
-        let mut theta = vec![0.0; prob.p];
+        let mut scratch;
+        let theta = if self.reuse_theta {
+            // These indices partition theta. Refill from the accepted point below.
+            &mut self.theta
+        } else {
+            scratch = vec![0.0; prob.p];
+            &mut scratch
+        };
         for (&i, &b) in prob.nonlin.iter().zip(beta.iter()) {
             theta[i] = b;
         }
         for (&i, &a) in prob.lin.iter().zip(cur.alpha.iter()) {
             theta[i] = a;
         }
-        prob.jacobian_nonlinear(&theta, &mut self.dnl);
+        prob.jacobian_nonlinear(theta, &mut self.dnl);
         // J = D − U (Uᵀ D)
         let utd = cur.u.tr_mul(&self.dnl);
         j.copy_from(&self.dnl);

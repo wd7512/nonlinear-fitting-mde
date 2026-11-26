@@ -53,14 +53,16 @@ mod tests {
 pub enum BenchmarkPolicy {
     Existing(Policy),
     AutoV1_1,
+    AutoV1_2,
 }
 
 impl BenchmarkPolicy {
     pub fn parse(name: &str) -> Result<Self, String> {
         match name {
             "auto_v1.1" => Ok(Self::AutoV1_1),
+            "auto_v1.2" => Ok(Self::AutoV1_2),
             _ => Policy::parse(name).map(Self::Existing)
-                .map_err(|e| format!("{e}; opt-in revisions: auto_v1.1")),
+                .map_err(|e| format!("{e}; opt-in revisions: auto_v1.1, auto_v1.2")),
         }
     }
 
@@ -68,6 +70,7 @@ impl BenchmarkPolicy {
         match self {
             Self::Existing(policy) => run(policy, prob, theta0, tr),
             Self::AutoV1_1 => run_revision::<1>(AUTO, prob, theta0, tr),
+            Self::AutoV1_2 => run_revision::<2>(AUTO, prob, theta0, tr),
         }
     }
 }
@@ -88,6 +91,9 @@ fn run_revision<const REV: u8>(
         let mut vp = VarPro::new(prob, tr);
         if REV >= 1 {
             vp.reuse_basis();
+        }
+        if REV >= 2 {
+            vp.reuse_theta();
         }
         let beta0 = vp.beta_of(theta0);
         if beta0.is_empty() {
