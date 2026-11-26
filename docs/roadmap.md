@@ -35,7 +35,7 @@ functions.
 
 ```
 rust/              the fitter: parser, differentiation, solver, thread pool, bindings
-python/symbfitrs/  the installed package (arrives with the bindings)
+python/symbfitrs/  the installed package
 bench/             suites, gate, baselines, reports; never shipped
 tests/
 ```
@@ -55,9 +55,9 @@ def scipy_trf(job):
 | step | work | done when |
 |---|---|---|
 | 1 | split out `bench/`, baseline registry | done |
-| 2 | Rust parser, differentiation, linear detection | Jacobians match SymPy's, gate holds |
-| 3 | Python bindings, thread pool, progress bar | a clean install fits an equation |
+| 2 | Rust parser, differentiation, linear detection | done (`rust/src/expr.rs`) |
+| 3 | Python bindings, thread pool, progress bar | done (`rust/src/python.rs`, `python/symbfitrs`) |
 | 4 | benchmark calls the package; end-to-end and thread-count comparisons | all six suites run |
-| 5 | wheel builds and PyPI release | installs on a machine without `cargo` |
+| 5 | wheel builds and PyPI release | wheels build in CI; a `v*` tag publishes |
 
-The SymPy tape export and the `symbfitrs-bench` program stay until steps 2 and 3 replace them.
+The SymPy tape export and the `symbfitrs-bench` program stay until step 4 replaces them.

@@ -7,6 +7,7 @@
 use nalgebra::DMatrix;
 use serde_json::Value;
 
+use crate::expr::Compiled;
 use crate::tape::{Bound, Program};
 
 pub struct Problem {
@@ -103,6 +104,43 @@ impl Problem {
             sep,
             starts,
             record: v["record"].clone(),
+        })
+    }
+
+    /// Bind a compiled model to data: `x` holds one column per variable; loss = mean of r².
+    pub fn new(c: &Compiled, x: &[Vec<f64>], y: Vec<f64>, w: Option<Vec<f64>>) -> Result<Problem, String> {
+        let (m, p) = (y.len(), c.params.len());
+        if x.len() != c.variables.len() {
+            return Err(format!("expected {} variable columns, got {}", c.variables.len(), x.len()));
+        }
+        if let Some(col) = x.iter().find(|col| col.len() != m) {
+            return Err(format!("x has a column of length {}, y has length {m}", col.len()));
+        }
+        if w.as_ref().is_some_and(|w| w.len() != m) {
+            return Err(format!("weights must have length {m}"));
+        }
+        if m == 0 {
+            return Err("no data points".into());
+        }
+        let y_eff = match &w {
+            Some(w) => y.iter().zip(w).map(|(a, b)| a * b).collect(),
+            None => y,
+        };
+        let lin = c.linear.clone();
+        Ok(Problem {
+            pid: String::new(),
+            p,
+            m,
+            y_eff,
+            w,
+            inv_scale: 1.0 / m as f64,
+            nonlin: (0..p).filter(|i| !lin.contains(i)).collect(),
+            lin,
+            f: Bound::new(&c.f, x, m, p)?,
+            fj: Bound::new(&c.fj, x, m, p)?,
+            sep: c.sep.as_ref().map(|s| Bound::new(s, x, m, p)).transpose()?,
+            starts: Vec::new(),
+            record: Value::Null,
         })
     }
 
