@@ -1,4 +1,5 @@
-"""``python -m bench run CONFIG --fitter``: export a config's problems, run the fitter, report.
+"""``python -m bench run CONFIG --fitter``: export a config's problems, run the fitter and the
+native ``varpro`` crate baseline (``varpro_rs``), report.
 
 Problems are built exactly as the Python worker builds them (same config, same seed), so
 Rust records are merged with a Python run of the same config when one exists and scored
@@ -117,7 +118,8 @@ def run(
         + (f"; skipped {len(info['skipped'])} (no symbolic form)" if info["skipped"] else "")
     )
     records = out_dir / "records_rust.jsonl"
-    extra = ("--seed", str(cfg.seed), "--max-wall-s", str(cfg.worker_deadline_s))
+    extra = ("--seed", str(cfg.seed), "--max-wall-s", str(cfg.worker_deadline_s),
+             "--solvers", "symbfitrs,varpro_rs")  # fmt: skip
     bench(problems_json, records, cfg.budgets_ms, extra, jobs, cfg.watchdog_s + 60)
     final = records
     if python_records.exists():

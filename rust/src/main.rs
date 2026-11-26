@@ -2,24 +2,30 @@
 //!
 //!   symbfitrs-bench bench --problems P.json --out records.jsonl
 //!                   [--budgets 1,5,10,25] [--deadline-ms 25] [--max-wall-s 600] [--seed 42]
+//!                   [--solvers symbfitrs,varpro_rs]
 //!
 //! `P.json` is written by `python -m bench run CONFIG --fitter`: SymPy-compiled tapes + data + starts.
 //! Records follow the Python harness schema, so its scoring and reports apply.
 //! Single-threaded, FP64; jobs run in a seeded random order with a cooperative per-fit
 //! deadline and a global wall-time cap (unfinished jobs are reported as truncated).
+//! `--solvers` adds the `varpro` crate as a native baseline (see `varpro_crate`).
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::time::Instant;
 
+mod varpro_crate;
+
 use symbfitrs::fit::fit;
 use symbfitrs::problem::Problem;
+use symbfitrs::solvers::Status;
 use symbfitrs::tape::Program;
 use symbfitrs::tracker::Tracker;
 use serde_json::{json, Map, Value};
 
 const USAGE: &str = "usage: symbfitrs-bench bench --problems P.json --out records.jsonl
-                [--budgets 1,5,10,25] [--deadline-ms 25] [--max-wall-s 600] [--seed 42]";
+                [--budgets 1,5,10,25] [--deadline-ms 25] [--max-wall-s 600] [--seed 42]
+                [--solvers symbfitrs,varpro_rs]";
 
 /// Label of the fitter in records and reports.
 const NAME: &str = "symbfitrs";
@@ -31,6 +37,7 @@ struct Args {
     deadline_ms: Option<f64>,
     max_wall_s: f64,
     seed: u64,
+    solvers: Vec<String>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -46,6 +53,7 @@ fn parse_args() -> Result<Args, String> {
         deadline_ms: None,
         max_wall_s: 600.0,
         seed: 42,
+        solvers: vec![NAME.into()],
     };
     while let Some(k) = it.next() {
         let mut v = || it.next().ok_or_else(|| format!("{k} needs a value"));
@@ -61,8 +69,12 @@ fn parse_args() -> Result<Args, String> {
             "--deadline-ms" => a.deadline_ms = Some(v()?.parse().map_err(|_| "--deadline-ms")?),
             "--max-wall-s" => a.max_wall_s = v()?.parse().map_err(|_| "--max-wall-s")?,
             "--seed" => a.seed = v()?.parse().map_err(|_| "--seed")?,
+            "--solvers" => a.solvers = v()?.split(',').map(String::from).collect(),
             _ => return Err(format!("unknown argument {k}")),
         }
+    }
+    if let Some(s) = a.solvers.iter().find(|s| ![NAME, varpro_crate::NAME].contains(&s.as_str())) {
+        return Err(format!("unknown solver {s}"));
     }
     if a.problems.is_empty() || a.out.is_empty() {
         return Err("--problems and --out are required".into());
@@ -104,6 +116,19 @@ fn main() {
     }
 }
 
+/// One fit by the named solver; returns its status and report label.
+fn run_solver(solver: &str, pb: &mut Problem, theta0: &[f64], tr: &mut Tracker) -> (Status, String) {
+    if solver == varpro_crate::NAME {
+        return (varpro_crate::fit(pb, theta0, tr), solver.into());
+    }
+    let (status, path) = fit(pb, theta0, tr);
+    let label = match path.label() {
+        None => NAME.to_string(),
+        Some(l) => format!("{NAME} ({l})"),
+    };
+    (status, label)
+}
+
 fn bench(args: Args) -> Result<(), String> {
     let t_start = Instant::now();
     // ---- load + bind (setup, reported separately) ----
@@ -129,19 +154,23 @@ fn bench(args: Args) -> Result<(), String> {
     let budgets = args.budgets.clone();
     let deadline_ms = args.deadline_ms.unwrap_or_else(|| budgets.iter().cloned().fold(0.0, f64::max));
 
-    // ---- warm-up: one fit of the first problem (caches, page faults) ----
+    // ---- warm-up: one fit of the first problem per solver (caches, page faults) ----
     let t0 = Instant::now();
     if let Some(pb) = problems.first_mut() {
         let theta0 = pb.starts[0].1.clone();
-        let mut tr = Tracker::new(deadline_ms.min(5.0), &budgets, pb.inv_scale);
-        fit(pb, &theta0, &mut tr);
+        for solver in &args.solvers {
+            let mut tr = Tracker::new(deadline_ms.min(5.0), &budgets, pb.inv_scale);
+            run_solver(solver, pb, &theta0, &mut tr);
+        }
     }
     let t_warm = t0.elapsed().as_secs_f64();
 
-    let mut jobs: Vec<(usize, usize)> = Vec::new();
+    let mut jobs: Vec<(usize, usize, &str)> = Vec::new();
     for (i, pb) in problems.iter().enumerate() {
         for s in 0..pb.starts.len() {
-            jobs.push((i, s));
+            for solver in &args.solvers {
+                jobs.push((i, s, solver.as_str()));
+            }
         }
     }
     shuffle(&mut jobs, args.seed);
@@ -152,7 +181,7 @@ fn bench(args: Args) -> Result<(), String> {
         writeln!(out, "{v}").ok();
     };
     if let Some(cfg) = meta.get_mut("config").and_then(Value::as_object_mut) {
-        cfg.insert("solvers".into(), json!([NAME]));
+        cfg.insert("solvers".into(), json!(args.solvers));
         cfg.insert("budgets_ms".into(), json!(budgets));
     }
     if let Some(m) = meta.as_object_mut() {
@@ -173,7 +202,7 @@ fn bench(args: Args) -> Result<(), String> {
     // ---- timed loop ----
     let t_loop = Instant::now();
     let mut done = 0usize;
-    for &(i, s) in &jobs {
+    for &(i, s, solver) in &jobs {
         if t_start.elapsed().as_secs_f64() >= args.max_wall_s {
             emit(&json!({"type": "truncated", "completed": done, "n_jobs": jobs.len()}), &mut out);
             break;
@@ -187,14 +216,10 @@ fn bench(args: Args) -> Result<(), String> {
 
         let t_job = Instant::now();
         let mut tr = Tracker::new(deadline_ms, &budgets, pb.inv_scale);
-        let (status, path) = fit(pb, &theta0, &mut tr);
+        let (status, label) = run_solver(solver, pb, &theta0, &mut tr);
         let elapsed_ms = tr.elapsed_ms();
         let job_wall_ms = t_job.elapsed().as_secs_f64() * 1e3;
 
-        let label = match path.label() {
-            None => NAME.to_string(),
-            Some(l) => format!("{NAME} ({l})"),
-        };
         let small = pb.p <= 128; // bench.config.MAX_THETA_P
         let mut rec = Map::new();
         rec.insert("type".into(), json!("fit"));
@@ -210,10 +235,10 @@ fn bench(args: Args) -> Result<(), String> {
             ("n_linear", json!(pb.lin.len())),
             ("loss0", if loss0.is_finite() { json!(loss0) } else { Value::Null }),
             ("start", json!(start_name)),
-            ("solver", json!(NAME)),
+            ("solver", json!(solver)),
             ("solver_label", json!(label)),
             ("status", json!(status.kind())),
-            ("error", if let symbfitrs::solvers::Status::Failure(e) = &status { json!(e) } else { Value::Null }),
+            ("error", if let Status::Failure(e) = &status { json!(e) } else { Value::Null }),
             ("elapsed_ms", json!(elapsed_ms)),
             ("job_wall_ms", json!(job_wall_ms)),
             ("best_loss", if tr.best_loss.is_finite() { json!(tr.best_loss) } else { json!(f64::MAX) }),

@@ -16,6 +16,9 @@ path = "src/main.rs"
 
 [dependencies]
 nalgebra = "0.35"
+# baseline only (symbfitrs-bench --solvers varpro_rs); varpro 0.14 is built on nalgebra 0.34
+varpro = "0.14"
+nalgebra034 = { package = "nalgebra", version = "0.34" }
 serde_json = "1"
 libm = "0.2"
 
