@@ -93,6 +93,9 @@ To change what the Rust optimiser does by default, compare on the gate (`--tier 
 `test`, `rank`). The acceptance margins are fixed in advance in
 `src/nlfit_mde/rust_bridge/gate.py`.
 
+For opt-in speed comparisons, see the [versioned `auto` stack](docs/baseline/auto-v1.md).
+`auto` itself stays on the original policy.
+
 ## License
 
 MIT. Downloaded benchmark data keeps its own licence.
