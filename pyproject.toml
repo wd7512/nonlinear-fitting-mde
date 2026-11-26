@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/wd7512/symbolic-regression-rust"
+Repository = "https://github.com/wd7512/symbfitrs"
 
 [dependency-groups]
 dev = [
