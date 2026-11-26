@@ -1,5 +1,5 @@
 # Stringer, Michaelos & Pachitariu (2019) V1 drifting gratings: 10 candidate orientation-tuning
-# equations x all eligible cells, fitted on all trials. Not a benchmark: the true equation is
+# equations x 300 randomly drawn eligible cells, fitted on all trials. Not a benchmark: the true equation is
 # unknown, reference = best MSE any solver found. Measures how far and how fast each optimiser
 # drives the MSE down; the standard report applies.
 # Data: uv run python scripts/fetch_benchmarks.py stringer2019
@@ -9,10 +9,11 @@ targets = [1e-2, 1e-6]      # within 1% / 1e-6 (relative) of the best MSE found
 success = "relative"
 relative_floor = 1e-12
 solvers = ["gauss_newton", "lm", "trf", "lbfgs", "varpro_lm"]   # adam never competitive here
-worker_deadline_s = 36000
-watchdog_s = 37000
+worker_deadline_s = 7200
+watchdog_s = 7500
 
 [[datasets]]
 kind = "stringer2019_gratings"
 path = "data/external/stringer2019/gratings.npz"
+max_cells = 300
 n_perturbed = 0             # one start per cell: the peak estimate

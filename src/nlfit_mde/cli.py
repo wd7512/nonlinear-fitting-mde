@@ -4,6 +4,7 @@
   nlfit-mde report CONFIG [--rust]  rebuild the report from saved records
   nlfit-mde inspect CONFIG          validate a config and preview its problems
   nlfit-mde gate build | run        fixed dev/test cases for changes to the Rust optimiser
+  nlfit-mde gate compare            where does a challenger policy beat the baseline?
 
 CONFIG is a TOML path or a config name, e.g. `nist_strd` for configs/benchmarks/nist_strd.toml.
 Results go to results/<name>/ (Python solvers) or results/<name>_rust/ (Rust optimiser, merged
@@ -43,19 +44,29 @@ def main(argv: list[str] | None = None) -> None:
             sp.add_argument("--rust", action="store_true", help="the Rust optimiser (rust/)")
             sp.add_argument("--out", type=Path, default=None, help="default: results/<name>")
             sp.add_argument("--no-plot", action="store_true")
+            if name == "run":
+                sp.add_argument(
+                    "--jobs", type=int, nargs="?", const=4, default=1,
+                    help="parallel single-threaded workers (bare flag: 4); timings get noisier",
+                )  # fmt: skip
     gp = sub.add_parser("gate")
-    gp.add_argument("action", choices=["build", "run"])
-    gp.add_argument("--tier", choices=["quick", "dev", "test"], default="quick")
+    gp.add_argument("action", choices=["build", "run", "compare"])
+    gp.add_argument("--tier", choices=["quick", "dev", "test", "rank"], default=None)
     gp.add_argument("--policies", default="auto", help="comma-separated Rust policies")
     gp.add_argument("--baseline", default="auto", help="policy the others are compared with")
+    gp.add_argument("--challenger", default="lm", help="compare: policy against the baseline")
+    gp.add_argument("--records", type=Path, help="compare: reuse a saved gate run")
     args = ap.parse_args(argv)
 
     if args.cmd == "gate":
         from .rust_bridge import gate
 
-        gate.build() if args.action == "build" else gate.run(
-            args.tier, args.policies, args.baseline
-        )
+        if args.action == "build":
+            gate.build()
+        elif args.action == "run":
+            gate.run(args.tier or "quick", args.policies, args.baseline)
+        else:
+            gate.compare(args.tier or "dev", args.challenger, args.baseline, args.records)
         return
 
     from .experiment import load_config  # validates the TOML before spawning anything
@@ -79,7 +90,14 @@ def main(argv: list[str] | None = None) -> None:
 
         out = args.out or Path("results") / f"{cfg.name}_rust"
         if args.cmd == "run":
-            run(cfg, out, Path("results") / cfg.name / "records.jsonl", plot, T_INVOCATION)
+            run(
+                cfg,
+                out,
+                Path("results") / cfg.name / "records.jsonl",
+                plot,
+                T_INVOCATION,
+                args.jobs,
+            )
         else:
             merged = out / "records.jsonl"
             records = merged if merged.exists() else out / "records_rust.jsonl"
@@ -93,7 +111,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "run":
         from .watchdog import run_worker  # numpy is loaded only in the worker
 
-        outcome = run_worker(path, records, cfg.watchdog_s)
+        outcome = run_worker(path, records, cfg.watchdog_s, args.jobs)
         run_info = {
             "worker_wall_s": outcome.wall_s,
             "killed_by_watchdog": outcome.killed,

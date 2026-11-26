@@ -13,6 +13,8 @@ import sys
 import time
 from pathlib import Path
 
+from ..watchdog import merge_shards
+
 RUST_DIR = Path(__file__).resolve().parents[3] / "rust"
 BINARY = RUST_DIR / "target" / "release" / "nlfit-rs"
 POLICIES = "auto,lm,gn,gn_lm,varpro_lm,varpro_gn,varpro_gn_lm"
@@ -63,7 +65,49 @@ def merge_records(rust: Path, python: Path, out: Path) -> None:
             fh.write(json.dumps(r) + "\n")
 
 
-def run(cfg, out_dir: Path, python_records: Path, plot: bool, t_invocation: float) -> None:
+def bench(
+    problems_json: Path,
+    records: Path,
+    policies: str,
+    budgets,
+    extra: tuple[str, ...] = (),
+    jobs: int = 1,
+    timeout: float | None = None,
+) -> None:
+    """Run ``nlfit-rs bench``; with ``jobs`` > 1, one process per share of the problems."""
+    binary = str(ensure_binary())
+
+    def cmd(problems: Path, out: Path) -> list[str]:
+        return [binary, "bench", "--problems", str(problems), "--out", str(out),
+                "--policies", policies, "--budgets", ",".join(f"{b:g}" for b in budgets),
+                *extra]  # fmt: skip
+
+    if jobs <= 1:
+        subprocess.run(cmd(problems_json, records), check=True, timeout=timeout)
+        return
+    doc = json.loads(problems_json.read_text())
+    parts, outs = [], []
+    for i in range(jobs):
+        parts.append(records.with_suffix(f".part{i}.json"))
+        outs.append(records.with_suffix(f".shard{i}.jsonl"))
+        parts[i].write_text(json.dumps({**doc, "problems": doc["problems"][i::jobs]}))
+    procs = [subprocess.Popen(cmd(p, o)) for p, o in zip(parts, outs, strict=True)]
+    try:
+        codes = [p.wait(timeout=timeout) for p in procs]
+    finally:
+        for p in procs:
+            if p.poll() is None:
+                p.kill()
+        for part in parts:
+            part.unlink(missing_ok=True)
+    if any(codes):
+        sys.exit(f"nlfit-rs exited with codes {codes}")
+    merge_shards(outs, records)
+
+
+def run(
+    cfg, out_dir: Path, python_records: Path, plot: bool, t_invocation: float, jobs: int = 1
+) -> None:
     from ..report import build_report
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -75,14 +119,8 @@ def run(cfg, out_dir: Path, python_records: Path, plot: bool, t_invocation: floa
         + (f"; skipped {len(info['skipped'])} (no symbolic form)" if info["skipped"] else "")
     )
     records = out_dir / "records_rust.jsonl"
-    cmd = [
-        str(ensure_binary()), "bench", "--problems", str(problems_json), "--out", str(records),
-        "--policies", POLICIES, "--budgets", ",".join(f"{b:g}" for b in cfg.budgets_ms),
-        "--seed", str(cfg.seed), "--max-wall-s", str(cfg.worker_deadline_s),
-    ]  # fmt: skip
-    rc = subprocess.run(cmd, timeout=cfg.watchdog_s + 60).returncode
-    if rc != 0:
-        sys.exit(f"nlfit-rs exited with code {rc}")
+    extra = ("--seed", str(cfg.seed), "--max-wall-s", str(cfg.worker_deadline_s))
+    bench(problems_json, records, POLICIES, cfg.budgets_ms, extra, jobs, cfg.watchdog_s + 60)
     final = records
     if python_records.exists():
         final = out_dir / "records.jsonl"

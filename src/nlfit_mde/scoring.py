@@ -103,3 +103,37 @@ def score(
     df["had_nonfinite"] = df.n_nonfinite > 0
     df["group"] = df.dataset + "/" + df.model
     return df
+
+
+def ranking_scores(df: pd.DataFrame, budgets: list[float]) -> pd.DataFrame | None:
+    """Candidate-equation ranking quality per solver, for curves fitted by >= 2 models.
+
+    Truth: candidates ordered by their reference loss. Each solver's ordering uses its best
+    loss over starts at the checkpoint. Columns: (metric, budget) with metric in "tau" (mean
+    Kendall tau), "top1" (picked the truly best candidate) and "lost" (share of candidates
+    with loss > 3 x reference, as in SAGE-Fit).
+    """
+    from scipy.stats import kendalltau
+
+    n_models = df.groupby(["dataset", "curve"]).model.transform("nunique")
+    sub = df[n_models >= 2]
+    if sub.empty:
+        return None
+    rows: dict = {}
+    for b in budgets:
+        per = sub.groupby(["solver", "dataset", "curve", "model"]).agg(
+            L=(f"best_{b:g}ms", "min"), R=("ref", "first")
+        )
+        for s, g in per.groupby(level="solver"):
+            taus, top1 = [], []
+            for _, c in g.groupby(level=["dataset", "curve"]):
+                L = c.L.replace([np.inf, -np.inf], np.nan).fillna(np.finfo(float).max)
+                if c.R.nunique() > 1:
+                    tau = kendalltau(c.R, L).statistic
+                    taus.append(0.0 if np.isnan(tau) else tau)
+                top1.append(L.idxmin() == c.R.idxmin())
+            row = rows.setdefault(s, {})
+            row["tau", b] = np.mean(taus) if taus else np.nan
+            row["top1", b] = np.mean(top1)
+            row["lost", b] = (g.L > 3 * g.R).mean()
+    return pd.DataFrame(rows).T

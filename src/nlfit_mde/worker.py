@@ -39,6 +39,7 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--shard", default="0/1", help="i/n: run every n-th job")
     args = ap.parse_args(argv)
     threadpool_limits(1)  # belt and braces on top of the env vars
     t_import = time.perf_counter() - T_START
@@ -66,6 +67,8 @@ def main(argv: list[str] | None = None) -> None:
 
         jobs = [(pb, s, a) for pb in problems for s in pb.starts for a in cfg.solvers]
         jobs = [jobs[i] for i in rng.permutation(len(jobs))]
+        shard, n_shards = map(int, args.shard.split("/"))
+        jobs = jobs[shard::n_shards]
 
         emit(
             {

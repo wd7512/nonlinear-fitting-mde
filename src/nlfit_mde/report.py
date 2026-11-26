@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from . import config
-from .scoring import ok_col, score, target_label
+from .scoring import ok_col, ranking_scores, score, target_label
 
 MAX_MD_ROWS = 200  # larger per-run tables go to CSV only
 
@@ -134,43 +134,21 @@ class Report:
         return t.map(lambda v: "inf" if not np.isfinite(v) else f"{v:.2e}")
 
     def ranking(self) -> pd.DataFrame | None:
-        """Candidate-equation ranking quality (curves fitted by >= 2 models, e.g. SAGE-Fit SPB).
-
-        Truth: candidates ordered by their reference loss (best found by any solver/start).
-        Each solver's ordering uses its best loss over starts at the checkpoint. Reports the
-        mean Kendall tau, top-1 accuracy (picked the truly best candidate) and the lost rate
-        (share of candidates with loss > 3 x reference, as in SAGE-Fit)."""
-        from scipy.stats import kendalltau
-
-        df = self.df
-        n_models = df.groupby(["dataset", "curve"]).model.transform("nunique")
-        sub = df[n_models >= 2]
-        if sub.empty:
+        """Candidate-equation ranking quality (see ``scoring.ranking_scores``)."""
+        t = ranking_scores(self.df, self.budgets)
+        if t is None:
             return None
-        rows = {}
-        for b in self.budgets:
-            col = f"best_{b:g}ms"
-            per = sub.groupby(["solver", "dataset", "curve", "model"]).agg(
-                L=(col, "min"), R=("ref", "first")
-            )
-            for s, g in per.groupby(level="solver"):
-                taus, top1 = [], []
-                for _, c in g.groupby(level=["dataset", "curve"]):
-                    L = c.L.replace([np.inf, -np.inf], np.nan).fillna(np.finfo(float).max)
-                    if c.R.nunique() > 1:
-                        tau = kendalltau(c.R, L).statistic
-                        taus.append(0.0 if np.isnan(tau) else tau)
-                    top1.append(L.idxmin() == c.R.idxmin())
-                lost = (g.L > 3 * g.R).mean()
-                rows.setdefault(s, {})
-                rows[s][f"Kendall τ @ {b:g} ms"] = f"{np.mean(taus):.3f}" if taus else "–"
-                rows[s][f"top-1 @ {b:g} ms"] = _pct(np.mean(top1))
-                rows[s][f"lost rate @ {b:g} ms"] = f"{lost:.3f}"
-        t = pd.DataFrame(rows).T
-        order = [
-            c for kind in ("Kendall", "top-1", "lost") for c in t.columns if c.startswith(kind)
-        ]
-        return self._ordered(t[order])
+        formats = {
+            "tau": ("Kendall τ", lambda v: "–" if pd.isna(v) else f"{v:.3f}"),
+            "top1": ("top-1", _pct),
+            "lost": ("lost rate", lambda v: f"{v:.3f}"),
+        }
+        out = {
+            f"{label} @ {b:g} ms": t[kind, b].map(fmt)
+            for kind, (label, fmt) in formats.items()
+            for b in self.budgets
+        }
+        return self._ordered(pd.DataFrame(out))
 
     def parameter_accuracy(self) -> pd.DataFrame | None:
         """Log relative error (correct significant digits, capped at 11) of the parameters at

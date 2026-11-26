@@ -30,6 +30,10 @@ history) and `success_vs_time.png`.
 | `nlfit-mde report CONFIG [--rust]` | rebuild the report from saved records |
 | `nlfit-mde inspect CONFIG` | validate a config and preview its problems |
 | `nlfit-mde gate build` / `gate run` | fixed dev/test cases for changes to the Rust optimiser |
+| `nlfit-mde gate compare --challenger lm` | where another Rust policy beats `auto`, by problem feature |
+
+`run --jobs` shares the fits between 4 single-threaded workers. It is much faster, but the
+timings get noisier, so use one worker when comparing speeds.
 
 `CONFIG` is a path or a name from `configs/`. With `--rust`, results go to
 `results/<name>_rust/` and are merged with the Python results of the same config if they exist.
@@ -84,6 +88,10 @@ uv run pytest
 uv run ruff check && uv run ruff format --check
 cargo test --release --manifest-path rust/Cargo.toml
 ```
+
+To change what the Rust optimiser does by default, compare on the gate (`--tier quick`, `dev`,
+`test`, `rank`). The acceptance margins are fixed in advance in
+`src/nlfit_mde/rust_bridge/gate.py`.
 
 ## License
 
