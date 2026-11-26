@@ -1,6 +1,6 @@
 //! Named fitting policies.
 //!
-//! `auto` is the accepted incumbent. **V0 = VarPro+LM** with its structural degenerate cases:
+//! `auto_v1` is an alias for `auto`, the accepted VarPro+LM incumbent:
 //! no eligible linear parameters → ordinary LM; all parameters linear → one linear solve.
 //! Challengers are tested against it before any routing rule is adopted.
 
@@ -20,12 +20,12 @@ pub struct Policy {
     pub auto: bool,
 }
 
-pub const NAMES: &[&str] = &["auto", "lm", "gn", "gn_lm", "varpro_lm", "varpro_gn", "varpro_gn_lm"];
+pub const NAMES: &[&str] = &["auto", "auto_v1", "lm", "gn", "gn_lm", "varpro_lm", "varpro_gn", "varpro_gn_lm"];
 
 impl Policy {
     pub fn parse(name: &str) -> Result<Policy, String> {
         let (projected, mode, auto) = match name {
-            "auto" => (true, Mode::Lm, true),
+            "auto" | "auto_v1" => (true, Mode::Lm, true),
             "lm" => (false, Mode::Lm, false),
             "gn" => (false, Mode::Gn, false),
             "gn_lm" => (false, Mode::GnLm, false),
@@ -35,6 +35,16 @@ impl Policy {
             _ => return Err(format!("unknown policy {name:?}; choose from {NAMES:?}")),
         };
         Ok(Policy { projected, mode, auto })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v1_is_an_exact_alias_for_auto() {
+        assert_eq!(Policy::parse("auto_v1").unwrap(), Policy::parse("auto").unwrap());
     }
 }
 
