@@ -81,6 +81,38 @@ configs and data you trust.
 
 The original experiment design is in [`docs/MDE.md`](docs/MDE.md).
 
+## Optimizer comparison
+
+Success rate on the shared synthetic benchmark (higher is better):
+
+| Optimizer | 1 ms | 5 ms | 10 ms | 25 ms | 100 ms |
+|---|---:|---:|---:|---:|---:|
+| Rust `auto_v1` (current `auto`) | 87.5% | 91.7% | 95.8% | 95.8% | 95.8% |
+| SciPy L-BFGS-B | 62.5% | 87.5% | 91.7% | 91.7% | 91.7% |
+| SciPy Levenberg–Marquardt | 70.8% | 83.3% | 91.7% | 95.8% | 95.8% |
+| SciPy Trust Region Reflective (TRF) | 62.5% | 83.3% | 87.5% | 95.8% | 95.8% |
+
+Success means reaching normalized MSE `≤ 1e-6` within the budget. The benchmark
+uses the same 24 generated fits for each optimizer: three equation families,
+four parameter counts (2, 8, 32, 96), and near/far starting points. Rust `auto_v1`
+is the repository's current Rust `auto` policy; it is the unchanged baseline,
+not the unmerged opt-in optimization PR. SciPy methods use this project's fixed
+least-squares tolerances and parameter scaling, rather than SciPy's unmodified
+library defaults. Results are from one run on Apple Silicon with Python 3.12.14,
+NumPy 2.5.5, and SciPy 1.18.1; each percentage is over 24 fits. These
+machine-specific results are illustrative, not a general performance claim.
+
+Reproduce the comparison with:
+
+```bash
+uv run nlfit-mde run readme_comparison
+uv run nlfit-mde run readme_comparison --rust
+```
+
+The first command records the three SciPy methods; the second adds the Rust
+baseline and generates the merged report. The config is
+[`configs/readme_comparison.toml`](configs/readme_comparison.toml).
+
 ## Development
 
 ```bash
