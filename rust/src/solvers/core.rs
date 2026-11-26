@@ -28,19 +28,19 @@ impl Default for Opts {
 }
 
 pub fn solve<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Status {
-    solve_with_scratch::<F, false, false>(f, x0, o)
+    solve_with_scratch::<F, false, false, false>(f, x0, o)
 }
 
-pub(crate) fn solve_with_scratch<F: Lsq, const SCALE: bool, const GRAD: bool>(
+pub(crate) fn solve_with_scratch<F: Lsq, const SCALE: bool, const GRAD: bool, const TRIAL: bool>(
     f: &mut F, x0: &DVector<f64>, o: &Opts,
 ) -> Status {
-    match run::<F, SCALE, GRAD>(f, x0, o) {
+    match run::<F, SCALE, GRAD, TRIAL>(f, x0, o) {
         Ok(s) => s,
         Err(Stop::Deadline) => Status::Deadline,
     }
 }
 
-fn run<F: Lsq, const SCALE: bool, const GRAD: bool>(
+fn run<F: Lsq, const SCALE: bool, const GRAD: bool, const TRIAL: bool>(
     f: &mut F, x0: &DVector<f64>, o: &Opts,
 ) -> Result<Status, Stop> {
     let (m, n) = (f.m(), f.n());
@@ -147,8 +147,14 @@ fn run<F: Lsq, const SCALE: bool, const GRAD: bool>(
                 if step.norm() <= o.xtol * (o.xtol + xs_norm) {
                     return Ok(Status::Converged);
                 }
-                delta.copy_from(&step.component_div(&d));
-                xt.copy_from(&(&x + &delta));
+                if TRIAL {
+                    for i in 0..n {
+                        xt[i] = x[i] + step[i] / d[i];
+                    }
+                } else {
+                    delta.copy_from(&step.component_div(&d));
+                    xt.copy_from(&(&x + &delta));
+                }
                 sse_t = f.residual(&xt, &mut rt)?;
                 if sse_t.is_finite() && sse_t < sse {
                     let rho = (sse - sse_t) / pred;
