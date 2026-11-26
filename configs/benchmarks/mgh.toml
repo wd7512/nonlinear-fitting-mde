@@ -1,0 +1,11 @@
+# More, Garbow & Hillstrom (1981): 35 least-squares problems, starts x0, 10x0, 100x0.
+# Loss = sum of squares; success = More & Wild (2009) reduction test against min(f*, best found).
+name = "mgh"
+budgets_ms = [1, 5, 10, 25]
+targets = [1e-3, 1e-7]
+success = "reduction"
+worker_deadline_s = 120
+watchdog_s = 150
+
+[[datasets]]
+kind = "mgh"
