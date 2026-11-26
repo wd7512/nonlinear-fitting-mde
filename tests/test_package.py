@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import symbfitrs as sf
+import eqnfitrs as sf
 from bench.suites import nist
 
 NIST = Path(__file__).resolve().parents[1] / "data" / "external" / "nist"

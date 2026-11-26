@@ -1,4 +1,4 @@
-"""Export ``Problem``s to the JSON read by ``symbfitrs-bench``.
+"""Export ``Problem``s to the JSON read by ``eqnfitrs-bench``.
 
 Programs are shared between problems with the same symbolic model (e.g. 1,000 curves of
 one family) and compiled once. Problems whose model has no symbolic form (finite-difference

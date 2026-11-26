@@ -1,8 +1,8 @@
-//! symbfitrs-bench: benchmark driver for the fitter, until the Python bindings replace it.
+//! eqnfitrs-bench: benchmark driver for the fitter, until the Python bindings replace it.
 //!
-//!   symbfitrs-bench bench --problems P.json --out records.jsonl
+//!   eqnfitrs-bench bench --problems P.json --out records.jsonl
 //!                   [--budgets 1,5,10,25] [--deadline-ms 25] [--max-wall-s 600] [--seed 42]
-//!                   [--solvers symbfitrs,varpro_rs]
+//!                   [--solvers eqnfitrs,varpro_rs]
 //!
 //! `P.json` is written by `python -m bench run CONFIG --fitter`: SymPy-compiled tapes + data + starts.
 //! Records follow the Python harness schema, so its scoring and reports apply.
@@ -16,19 +16,19 @@ use std::time::Instant;
 
 mod varpro_crate;
 
-use symbfitrs::fit::fit;
-use symbfitrs::problem::Problem;
-use symbfitrs::solvers::Status;
-use symbfitrs::tape::Program;
-use symbfitrs::tracker::Tracker;
+use eqnfitrs::fit::fit;
+use eqnfitrs::problem::Problem;
+use eqnfitrs::solvers::Status;
+use eqnfitrs::tape::Program;
+use eqnfitrs::tracker::Tracker;
 use serde_json::{json, Map, Value};
 
-const USAGE: &str = "usage: symbfitrs-bench bench --problems P.json --out records.jsonl
+const USAGE: &str = "usage: eqnfitrs-bench bench --problems P.json --out records.jsonl
                 [--budgets 1,5,10,25] [--deadline-ms 25] [--max-wall-s 600] [--seed 42]
-                [--solvers symbfitrs,varpro_rs]";
+                [--solvers eqnfitrs,varpro_rs]";
 
 /// Label of the fitter in records and reports.
-const NAME: &str = "symbfitrs";
+const NAME: &str = "eqnfitrs";
 
 struct Args {
     problems: String,
@@ -271,7 +271,7 @@ fn bench(args: Args) -> Result<(), String> {
     );
     out.flush().map_err(|e| e.to_string())?;
     eprintln!(
-        "symbfitrs-bench: {done}/{} fits in {:.2} s (setup {:.2} s) -> {}",
+        "eqnfitrs-bench: {done}/{} fits in {:.2} s (setup {:.2} s) -> {}",
         jobs.len(),
         t_loop.elapsed().as_secs_f64(),
         t_parse + t_bind,

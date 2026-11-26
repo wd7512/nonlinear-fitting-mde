@@ -1,4 +1,4 @@
-//! symbfitrs: a fast CPU fitter for nonlinear least squares with < 100 parameters.
+//! eqnfitrs: a fast CPU fitter for nonlinear least squares with < 100 parameters.
 //!
 //! * [`tape`]     vectorised expression tapes (model, Jacobian, separable parts)
 //! * [`problem`]  a bound fitting problem (data + tapes + starts)

@@ -36,7 +36,7 @@ jobs:
           uv venv /tmp/smoke --python 3.10
           uv pip install --python /tmp/smoke dist/*.whl
           /tmp/smoke/bin/python -c "
-          import numpy as np, symbfitrs as sf
+          import numpy as np, eqnfitrs as sf
           x = np.linspace(0, 5, 50)
           r = sf.compile('a*exp(-b*x) + c').fit(x, 2*np.exp(-0.7*x) + 0.3, budget_ms=50)
           assert r.success and abs(r['b'] - 0.7) < 1e-8, r
@@ -65,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/symbfitrs/
+      url: https://pypi.org/project/eqnfitrs/
     permissions:
       id-token: write
     steps:

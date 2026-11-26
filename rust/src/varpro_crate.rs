@@ -19,9 +19,9 @@ use varpro::model::SeparableNonlinearModel;
 use varpro::problem::SeparableProblemBuilder;
 use varpro::solvers::levmar::LevMarSolver;
 
-use symbfitrs::problem::Problem;
-use symbfitrs::solvers::Status;
-use symbfitrs::tracker::Tracker;
+use eqnfitrs::problem::Problem;
+use eqnfitrs::solvers::Status;
+use eqnfitrs::tracker::Tracker;
 
 pub const NAME: &str = "varpro_rs";
 

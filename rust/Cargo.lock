@@ -36,6 +36,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2906d3628a885aa49a23b88e71f63e51ae8df41cd76652287f0a6179a11833a9"
 
 [[package]]
+name = "eqnfitrs"
+version = "0.1.0"
+dependencies = [
+ "libm",
+ "nalgebra 0.34.2",
+ "nalgebra 0.35.0",
+ "pyo3",
+ "serde_json",
+ "varpro",
+]
+
+[[package]]
 name = "glam"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -512,18 +524,6 @@ dependencies = [
  "num-complex",
  "num-traits",
  "wide 1.7.1",
-]
-
-[[package]]
-name = "symbfitrs"
-version = "0.1.0"
-dependencies = [
- "libm",
- "nalgebra 0.34.2",
- "nalgebra 0.35.0",
- "pyo3",
- "serde_json",
- "varpro",
 ]
 
 [[package]]

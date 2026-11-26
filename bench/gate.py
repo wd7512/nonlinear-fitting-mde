@@ -54,7 +54,7 @@ TIERS = {
     "test": ("test", SUITES, 150),
 }
 RANK_CURVES = {"sagefit_spb": None, "stringer2019_gratings": 100}  # None = all curves
-FITTER = "symbfitrs"  # the fitter's label in records
+FITTER = "eqnfitrs"  # the fitter's label in records
 BASELINE = "baseline"
 
 

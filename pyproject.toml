@@ -3,7 +3,7 @@ requires = ["maturin>=1.9,<2"]
 build-backend = "maturin"
 
 [project]
-name = "symbfitrs"
+name = "eqnfitrs"
 version = "0.1.0"
 description = "Fast nonlinear least-squares fitting on millisecond CPU budgets."
 readme = "README.md"
@@ -23,7 +23,7 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/wd7512/symbfitrs"
+Repository = "https://github.com/wd7512/eqnfitrs"
 
 [dependency-groups]
 # the benchmark in bench/ (never shipped)
@@ -50,7 +50,7 @@ dev = [
 [tool.maturin]
 manifest-path = "rust/Cargo.toml"
 python-source = "python"
-module-name = "symbfitrs._core"
+module-name = "eqnfitrs._core"
 features = ["python"]
 no-default-features = true
 include = [{ path = "LICENSE", format = "sdist" }]
@@ -66,7 +66,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["bench", "symbfitrs"]
+known-first-party = ["bench", "eqnfitrs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,10 +1,10 @@
-# symbfitrs
+# eqnfitrs
 
-A fast CPU fitter for nonlinear equations, written in Rust, for symbolic regression. `uv pip install symbfitrs` (Linux, macOS), then `symbfitrs.compile("a*exp(-b*x) + c").fit(x, y, budget_ms=5)`, or `symbfitrs.Pool(threads=8).fit_many([(expr, x, y), ...])` for batches.
+A fast CPU fitter for nonlinear equations, written in Rust, for symbolic regression. `uv pip install eqnfitrs` (Linux, macOS), then `eqnfitrs.compile("a*exp(-b*x) + c").fit(x, y, budget_ms=5)`, or `eqnfitrs.Pool(threads=8).fit_many([(expr, x, y), ...])` for batches.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/wd7512/symbfitrs/main/docs/benchmark-dark.png">
-  <img alt="Share of fits reaching the target against time per fit for twelve solvers: symbfitrs 72% at 1 ms and 86% at 5 ms; the best other, SciPy lm, 47% and 71%" src="https://raw.githubusercontent.com/wd7512/symbfitrs/main/docs/benchmark-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/wd7512/eqnfitrs/main/docs/benchmark-dark.png">
+  <img alt="Share of fits reaching the target against time per fit for twelve solvers: eqnfitrs 72% at 1 ms and 86% at 5 ms; the best other, SciPy lm, 47% and 71%" src="https://raw.githubusercontent.com/wd7512/eqnfitrs/main/docs/benchmark-light.png">
 </picture>
 
 Six suites (NIST StRD, Moré–Garbow–Hillstrom, FitBenchmarking, SAGE-Fit, Stringer 2019, synthetic up to 99 parameters); one thread per fit; every solver at its library defaults (SciPy, Optimistix, Ceres via pyceres, SAGE-Fit, VarProPy, the Rust `varpro` crate; see `bench/baselines.py`); compile time not counted. SAGE-Fit data is Python code the benchmark executes, so fetch only data you trust. The benchmark needs [uv](https://docs.astral.sh/uv/) and [cargo](https://rustup.rs/).

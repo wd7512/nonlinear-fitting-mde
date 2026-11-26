@@ -297,7 +297,7 @@ def build_report(
         f"Total invocation time (including reporting): {time.perf_counter() - t_invocation:.2f} s."
     )
 
-    md = [f"# symbfitrs benchmark — {meta.get('experiment', '')}", ""]
+    md = [f"# eqnfitrs benchmark — {meta.get('experiment', '')}", ""]
     for title, body in sections:
         md += [f"## {title}", "", body, ""]
     md += ["## Notes", ""] + [f"- {n}" for n in notes]

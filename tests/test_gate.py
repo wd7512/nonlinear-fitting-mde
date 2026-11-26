@@ -22,7 +22,7 @@ def test_sample_spreads_over_groups():
 def _fit(ref):
     return {
         "type": "fit", "problem": "p", "dataset": "d", "model": "m", "start": "s",
-        "solver": "symbfitrs", "n_nonfinite": 0, "loss0": 1.0, "best_loss": 0.5,
+        "solver": "eqnfitrs", "n_nonfinite": 0, "loss0": 1.0, "best_loss": 0.5,
         "hist_t_ms": [0.1], "hist_loss": [0.5], "ref_loss": ref, "ref_mode": "given",
         "gate_mode": "absolute", "gate_target": 0.1, "gate_floor": 1e-20,
     }  # fmt: skip

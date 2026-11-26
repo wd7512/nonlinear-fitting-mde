@@ -17,7 +17,7 @@ from pathlib import Path
 from ..watchdog import merge_shards
 
 RUST_DIR = Path(__file__).resolve().parents[2] / "rust"
-BINARY = RUST_DIR / "target" / "release" / "symbfitrs-bench"
+BINARY = RUST_DIR / "target" / "release" / "eqnfitrs-bench"
 
 
 def ensure_binary() -> Path:
@@ -73,7 +73,7 @@ def bench(
     jobs: int = 1,
     timeout: float | None = None,
 ) -> None:
-    """Run ``symbfitrs-bench bench``; with ``jobs`` > 1, one process per share of the problems."""
+    """Run ``eqnfitrs-bench bench``; with ``jobs`` > 1, one process per share of the problems."""
     binary = str(ensure_binary())
 
     def cmd(problems: Path, out: Path) -> list[str]:
@@ -100,7 +100,7 @@ def bench(
         for part in parts:
             part.unlink(missing_ok=True)
     if any(codes):
-        sys.exit(f"symbfitrs-bench exited with codes {codes}")
+        sys.exit(f"eqnfitrs-bench exited with codes {codes}")
     merge_shards(outs, records)
 
 
@@ -119,7 +119,7 @@ def run(
     )
     records = out_dir / "records_rust.jsonl"
     extra = ("--seed", str(cfg.seed), "--max-wall-s", str(cfg.worker_deadline_s),
-             "--solvers", "symbfitrs,varpro_rs")  # fmt: skip
+             "--solvers", "eqnfitrs,varpro_rs")  # fmt: skip
     bench(problems_json, records, cfg.budgets_ms, extra, jobs, cfg.watchdog_s + 60)
     final = records
     if python_records.exists():

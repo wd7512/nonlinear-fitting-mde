@@ -42,7 +42,7 @@ def fetch_nist() -> None:
         target = dest / f"{name}.dat"
         if target.exists():
             continue
-        req = urllib.request.Request(URL.format(name=name), headers={"User-Agent": "symbfitrs"})
+        req = urllib.request.Request(URL.format(name=name), headers={"User-Agent": "eqnfitrs"})
         with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 - fixed https URL
             target.write_bytes(r.read())
         print(f"  {target.relative_to(ROOT)}")

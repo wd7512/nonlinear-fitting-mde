@@ -1,16 +1,16 @@
 # Roadmap
 
-`symbfitrs` is a fast Rust fitter for nonlinear equations that you can install, plus a benchmark
+`eqnfitrs` is a fast Rust fitter for nonlinear equations that you can install, plus a benchmark
 in this repository that shows it is fast and behaves correctly. The symbolic regression search
 that proposes equations is the user's job.
 
 ## Interface
 
 ```python
-model = symbfitrs.compile("a*exp(-b*x) + c", variables=["x"])
+model = eqnfitrs.compile("a*exp(-b*x) + c", variables=["x"])
 result = model.fit(x, y, budget_ms=5)
 
-pool = symbfitrs.Pool(threads=8)
+pool = eqnfitrs.Pool(threads=8)
 results = pool.fit_many([(expr, x, y), ...], budget_ms=5)  # same order as the jobs
 ```
 
@@ -35,7 +35,7 @@ functions.
 
 ```
 rust/              the fitter: parser, differentiation, solver, thread pool, bindings
-python/symbfitrs/  the installed package
+python/eqnfitrs/  the installed package
 bench/             suites, gate, baselines, reports; never shipped
 tests/
 ```
@@ -56,8 +56,8 @@ def scipy_trf(job):
 |---|---|---|
 | 1 | split out `bench/`, baseline registry | done |
 | 2 | Rust parser, differentiation, linear detection | done (`rust/src/expr.rs`) |
-| 3 | Python bindings, thread pool, progress bar | done (`rust/src/python.rs`, `python/symbfitrs`) |
+| 3 | Python bindings, thread pool, progress bar | done (`rust/src/python.rs`, `python/eqnfitrs`) |
 | 4 | benchmark calls the package; end-to-end and thread-count comparisons | all six suites run |
 | 5 | wheel builds and PyPI release | wheels build in CI; a `v*` tag publishes |
 
-The SymPy tape export and the `symbfitrs-bench` program stay until step 4 replaces them.
+The SymPy tape export and the `eqnfitrs-bench` program stay until step 4 replaces them.

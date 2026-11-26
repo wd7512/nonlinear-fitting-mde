@@ -1,9 +1,9 @@
 """Fast nonlinear least-squares fitting of symbolic expressions on millisecond CPU budgets.
 
-model = symbfitrs.compile("a*exp(-b*x) + c")
+model = eqnfitrs.compile("a*exp(-b*x) + c")
 result = model.fit(x, y, budget_ms=5)
 
-results = symbfitrs.Pool(threads=8).fit_many([(expr, x, y), ...], budget_ms=5)
+results = eqnfitrs.Pool(threads=8).fit_many([(expr, x, y), ...], budget_ms=5)
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import numpy as np
 from . import _core
 
 __all__ = ["FitResult", "Model", "Pool", "compile"]
-__version__ = version("symbfitrs")
+__version__ = version("eqnfitrs")
 
 
 @dataclass(frozen=True)

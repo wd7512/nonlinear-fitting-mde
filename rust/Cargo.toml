@@ -1,5 +1,5 @@
 [package]
-name = "symbfitrs"
+name = "eqnfitrs"
 version = "0.1.0"
 edition = "2021"
 description = "Fast nonlinear least-squares fitter (variable projection + LM)"
@@ -7,12 +7,12 @@ license = "MIT"
 publish = false
 
 [lib]
-name = "symbfitrs"
+name = "eqnfitrs"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "symbfitrs-bench"
+name = "eqnfitrs-bench"
 path = "src/main.rs"
 required-features = ["bench"]
 
@@ -20,7 +20,7 @@ required-features = ["bench"]
 default = ["bench"]
 # the Python extension module (built by maturin, see pyproject.toml)
 python = ["dep:pyo3"]
-# symbfitrs-bench and its varpro-crate baseline; varpro 0.14 is built on nalgebra 0.34
+# eqnfitrs-bench and its varpro-crate baseline; varpro 0.14 is built on nalgebra 0.34
 bench = ["dep:varpro", "dep:nalgebra034"]
 
 [dependencies]

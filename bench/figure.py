@@ -20,7 +20,7 @@ from .config import CONFIG_DIR  # noqa: E402
 from .gate import SUITES  # noqa: E402
 
 LABELS = {  # display names; * marks the separable-only solvers
-    "symbfitrs": "symbfitrs",
+    "eqnfitrs": "eqnfitrs",
     "scipy_lm": "SciPy lm", "scipy_trf": "SciPy trf", "scipy_dogbox": "SciPy dogbox",
     "optx_lm": "Optimistix LM", "optx_indirect_lm": "Optimistix indirect LM",
     "optx_dogleg": "Optimistix dogleg", "optx_gauss_newton": "Optimistix Gauss–Newton",
@@ -30,7 +30,7 @@ LABELS = {  # display names; * marks the separable-only solvers
 BUDGETS = (1, 5, 25)  # ms, tabulated
 # colour = library (categorical slot), dash = solver within it
 STYLE = {
-    "symbfitrs": (0, "-"),
+    "eqnfitrs": (0, "-"),
     "scipy_lm": (1, "-"), "scipy_trf": (1, "--"), "scipy_dogbox": (1, ":"),
     "optx_lm": (2, "-"), "optx_indirect_lm": (2, "--"), "optx_dogleg": (2, ":"),
     "optx_gauss_newton": (2, "-."),
@@ -75,7 +75,7 @@ def draw(curves: dict[str, np.ndarray], path: Path, theme: dict) -> None:
     i5 = min(np.searchsorted(GRID, 5), GRID.size - 1)
     for solver in sorted(curves, key=lambda s: -curves[s][i5]):  # legend in 5 ms order
         slot, dash = STYLE.get(solver, (0, ":"))
-        top = solver == "symbfitrs"
+        top = solver == "eqnfitrs"
         ax.plot(GRID, curves[solver], color=theme["series"][slot], linestyle=dash,
                 linewidth=2.6 if top else 1.6, label=LABELS.get(solver, solver),
                 zorder=3 if top else 2)  # fmt: skip

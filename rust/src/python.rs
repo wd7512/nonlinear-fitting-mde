@@ -1,5 +1,5 @@
-//! Python bindings (`symbfitrs._core`). Arrays cross as native-endian float64 bytes, so the
-//! module needs only the stable ABI; `python/symbfitrs` wraps it in the public API.
+//! Python bindings (`eqnfitrs._core`). Arrays cross as native-endian float64 bytes, so the
+//! module needs only the stable ABI; `python/eqnfitrs` wraps it in the public API.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -38,7 +38,7 @@ fn out(o: Outcome) -> PyOutcome {
     (o.names, o.params, o.loss, o.status, o.message, o.nfev, o.time_ms)
 }
 
-#[pyclass(frozen, module = "symbfitrs._core")]
+#[pyclass(frozen, module = "eqnfitrs._core")]
 struct Model(Arc<Compiled>);
 
 #[pymethods]
