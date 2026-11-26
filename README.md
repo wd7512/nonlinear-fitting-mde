@@ -85,12 +85,7 @@ The original experiment design is in [`docs/MDE.md`](docs/MDE.md).
 
 Success rate on the shared synthetic benchmark (higher is better):
 
-| Optimizer | 1 ms | 5 ms | 10 ms | 25 ms | 100 ms |
-|---|---:|---:|---:|---:|---:|
-| Rust `auto_v1` (current `auto`) | 87.5% | 91.7% | 95.8% | 95.8% | 95.8% |
-| SciPy L-BFGS-B | 62.5% | 87.5% | 91.7% | 91.7% | 91.7% |
-| SciPy Levenberg–Marquardt | 70.8% | 83.3% | 91.7% | 95.8% | 95.8% |
-| SciPy Trust Region Reflective (TRF) | 62.5% | 83.3% | 87.5% | 95.8% | 95.8% |
+![Graph comparing optimizer success rate against time budget. Rust auto_v1 and three SciPy methods are shown at 1, 5, 10, 25, and 100 milliseconds.](docs/baseline/optimizer-success-rate.png)
 
 Success means reaching normalized MSE `≤ 1e-6` within the budget. The benchmark
 uses the same 24 generated fits for each optimizer: three equation families,
