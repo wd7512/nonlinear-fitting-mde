@@ -1,5 +1,8 @@
 # Gate baseline, 2026-11-26
 
+Historical record, taken before the rename to symbfitrs: `rs_auto` is the current fitter, the
+other `rs_*` policies have since been removed, and the commands are now `python -m bench gate`.
+
 Rust policies on the frozen gate tiers, before any change to `auto`. Apple Silicon, one thread.
 Tier files are not committed (they embed third-party data); `symreg-rs gate build` recreates
 them from local runs. References depend on those runs, so check the hashes before comparing.

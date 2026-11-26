@@ -1,6 +1,6 @@
 # Optimiser experiments
 
-`auto` (variable projection + LM, with structural exceptions) remains the default. The opt-in
+`auto` (variable projection + LM, with structural exceptions) remains the fitter. The opt-in
 `exp_*` policies tried on 2026-11-26 were not promoted. Their code, scripts and full log
 (`docs/baseline/rust-experiments.md`) are on the local branch `experiments/v0-v15`.
 

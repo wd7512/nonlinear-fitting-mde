@@ -213,9 +213,7 @@ __marimo__/
 # ---- project ----
 # Generated benchmark outputs
 results/
-# User datasets are private/large by default; only docs and bundled examples are tracked.
-data/*
-!data/README.md
-!data/examples/
+# Downloaded benchmark data and gate tiers
+data/
 .DS_Store
 rust/target/
