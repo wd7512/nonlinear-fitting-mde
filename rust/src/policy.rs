@@ -55,6 +55,7 @@ pub enum BenchmarkPolicy {
     AutoV1_1,
     AutoV1_2,
     AutoV1_3,
+    AutoV1_4,
 }
 
 impl BenchmarkPolicy {
@@ -63,8 +64,9 @@ impl BenchmarkPolicy {
             "auto_v1.1" => Ok(Self::AutoV1_1),
             "auto_v1.2" => Ok(Self::AutoV1_2),
             "auto_v1.3" => Ok(Self::AutoV1_3),
+            "auto_v1.4" => Ok(Self::AutoV1_4),
             _ => Policy::parse(name).map(Self::Existing)
-                .map_err(|e| format!("{e}; opt-in revisions: auto_v1.1 through auto_v1.3")),
+                .map_err(|e| format!("{e}; opt-in revisions: auto_v1.1 through auto_v1.4")),
         }
     }
 
@@ -74,6 +76,7 @@ impl BenchmarkPolicy {
             Self::AutoV1_1 => run_revision::<1>(AUTO, prob, theta0, tr),
             Self::AutoV1_2 => run_revision::<2>(AUTO, prob, theta0, tr),
             Self::AutoV1_3 => run_revision::<3>(AUTO, prob, theta0, tr),
+            Self::AutoV1_4 => run_revision::<4>(AUTO, prob, theta0, tr),
         }
     }
 }
@@ -108,8 +111,10 @@ fn run_revision<const REV: u8>(
                 Err(Stop::Deadline) => (Status::Deadline, "linear solve"),
             };
         }
-        let status = if REV >= 3 {
-            solve_with_scratch::<_, true>(&mut vp, &beta0, &opts)
+        let status = if REV >= 4 {
+            solve_with_scratch::<_, true, true>(&mut vp, &beta0, &opts)
+        } else if REV >= 3 {
+            solve_with_scratch::<_, true, false>(&mut vp, &beta0, &opts)
         } else {
             solve(&mut vp, &beta0, &opts)
         };

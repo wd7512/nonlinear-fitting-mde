@@ -28,19 +28,21 @@ impl Default for Opts {
 }
 
 pub fn solve<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Status {
-    solve_with_scratch::<F, false>(f, x0, o)
+    solve_with_scratch::<F, false, false>(f, x0, o)
 }
 
-pub(crate) fn solve_with_scratch<F: Lsq, const SCALE: bool>(
+pub(crate) fn solve_with_scratch<F: Lsq, const SCALE: bool, const GRAD: bool>(
     f: &mut F, x0: &DVector<f64>, o: &Opts,
 ) -> Status {
-    match run::<F, SCALE>(f, x0, o) {
+    match run::<F, SCALE, GRAD>(f, x0, o) {
         Ok(s) => s,
         Err(Stop::Deadline) => Status::Deadline,
     }
 }
 
-fn run<F: Lsq, const SCALE: bool>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
+fn run<F: Lsq, const SCALE: bool, const GRAD: bool>(
+    f: &mut F, x0: &DVector<f64>, o: &Opts,
+) -> Result<Status, Stop> {
     let (m, n) = (f.m(), f.n());
     let mut x = x0.clone();
     let mut r = DVector::zeros(m);
@@ -57,6 +59,7 @@ fn run<F: Lsq, const SCALE: bool>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Res
     let mut step = DVector::zeros(n);
     let mut xt = DVector::zeros(n);
     let mut rt = DVector::zeros(m);
+    let mut grad_buf = if GRAD { DVector::zeros(n) } else { DVector::zeros(0) };
     let mut gn = o.mode != Mode::Lm;
     let mut lam = -1.0; // initialised from the first factorisation that needs it
     let mut nu = 2.0;
@@ -82,7 +85,14 @@ fn run<F: Lsq, const SCALE: bool>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Res
         }
         // gradient (cosine) test on the scaled problem
         let rn = r.norm();
-        let grad = js.tr_mul(&r);
+        let grad_owned;
+        let grad = if GRAD {
+            js.tr_mul_to(&r, &mut grad_buf);
+            &grad_buf
+        } else {
+            grad_owned = js.tr_mul(&r);
+            &grad_owned
+        };
         let gmax: f64 = (0..n)
             .map(|j| {
                 let cn = js.column(j).norm();
