@@ -21,8 +21,16 @@ def run_job(
     t_job = clock_ns()  # includes per-fit setup, for end-to-end throughput
     fn = BASELINES[solver_name]
     theta0 = problem.starts[start].copy()
+    if prepare := getattr(fn, "prepare", None):
+        prepare(problem.y.size, problem.p)  # untimed one-off setup per shape (JIT compile)
     ev = TimedEvaluator(problem, deadline_ms, budgets_ms, full_history)
-    job = Job(residual=ev.residual, p0=theta0.copy(), budget_ms=deadline_ms)
+    job = Job(
+        residual=ev.residual,
+        p0=theta0.copy(),
+        budget_ms=deadline_ms,
+        linear_idx=tuple(int(i) for i in problem.model.linear_idx),
+        separable=ev.separable,
+    )
     status, error, theta = "returned", None, None
     with np.errstate(all="ignore"):
         loss0 = ev.loss_of(ev.residual(theta0))  # initial loss, tracked at its actual time

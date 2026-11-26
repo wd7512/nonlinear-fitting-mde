@@ -22,6 +22,12 @@ dependencies = [
 Repository = "https://github.com/wd7512/symbfitrs"
 
 [dependency-groups]
+baselines = [
+    "jax[cpu]>=0.12.1",
+    "optimistix>=0.1.0",
+    "pyceres>=2.6",
+    "varpropy",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.6",
@@ -46,3 +52,7 @@ addopts = "-ra"
 
 [tool.uv]
 package = false  # nothing is shipped until the Python bindings exist (docs/roadmap.md, step 3)
+default-groups = ["dev", "baselines"]
+
+[tool.uv.sources]
+varpropy = { git = "https://github.com/ProfLear/VarProPy.git", rev = "26cba7f573fee857dfbc9ad71e5aac8635cf4f4e" }

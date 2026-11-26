@@ -3,14 +3,21 @@ import contextlib
 import numpy as np
 import pytest
 
-from bench.baselines import BASELINES, baseline
+from bench.baselines import BASELINES, SAGEFIT, baseline
 from bench.models import SymbolicModel
 from bench.problem import Problem
 from bench.runner import run_job
 from bench.suites.synthetic import make_problem
 
+NAMES = [
+    pytest.param(n, marks=pytest.mark.skipif(not SAGEFIT.is_dir(), reason="bench.fetch sagefit"))
+    if n == "sagefit"
+    else n
+    for n in BASELINES
+]
 
-@pytest.mark.parametrize("name", list(BASELINES))
+
+@pytest.mark.parametrize("name", NAMES)
 @pytest.mark.parametrize("weighted", [False, True])
 def test_baselines_fit_an_easy_problem(name, weighted):
     x = np.linspace(0, 3, 50)
@@ -103,3 +110,20 @@ def test_harness_errors_are_not_baseline_failures(register, monkeypatch):
     monkeypatch.setattr(pb.model, "predict", predict)
     with pytest.raises(ZeroDivisionError):
         run_job(pb, "near", "stay_put", deadline_ms=50)
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_baselines_stop_at_the_deadline(name):
+    pb = make_problem("exp_mixture", 32, np.random.default_rng(0))
+    rec = run_job(pb, "far", name, deadline_ms=1)
+    assert rec["status"] == "deadline", rec["error"]
+
+
+@pytest.mark.parametrize("expr", ["A*tanh(k*x)", "A*exp(-k*x) + k"])  # no split; k in the offset
+def test_varpropy_declines_problems_it_cannot_express(expr):
+    x = np.linspace(0, 3, 50)
+    model = SymbolicModel("d", expr, ["A", "k"], ["x"], x, linear=[] if "tanh" in expr else ["A"])
+    pb = Problem("t/d/0", "t", "d", "0", model, model.predict(np.array([1.2, 0.5])),
+                 {"s": np.array([1.0, 0.4])})  # fmt: skip
+    rec = run_job(pb, "s", "varpropy", deadline_ms=500)
+    assert rec["status"] == "failure" and "ValueError" in rec["error"]

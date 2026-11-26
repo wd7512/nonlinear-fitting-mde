@@ -27,6 +27,7 @@ class TimedEvaluator:
 
     def __init__(self, problem, deadline_ms: float, snapshot_ms=(), full_history=False):
         self.model = problem.model
+        self.lin = problem.model.linear_idx
         self.w = problem.weights  # residual weights (1/sigma) or None
         self.y = problem.y
         self.k = 1.0 / (self.y.size * problem.denom)  # sum of squares -> normalised loss
@@ -81,6 +82,24 @@ class TimedEvaluator:
         self.nfev += 1
         self.record(theta, r, t2 - self.t0)
         return r
+
+    def separable(self, theta: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """``(r0, Phi)`` with residual(theta) = r0(beta) + Phi(beta) @ alpha, where alpha =
+        theta[linear_idx] and beta is the rest: the separable form, for variable projection.
+
+        Timed and deadline-checked like ``residual``, but not recorded: it has no loss.
+        """
+        t1 = clock_ns()
+        if t1 - self.t0 >= self.deadline_ns:
+            raise DeadlineExceeded
+        th = np.array(theta, dtype=float)
+        th[self.lin] = 0.0
+        r0, phi = self.model.predict(th) - self.y, self.model.jacobian(th)[:, self.lin]
+        if self.w is not None:
+            r0, phi = self.w * r0, self.w[:, None] * phi
+        self.fev_ns += clock_ns() - t1
+        self.nfev += 1
+        return r0, phi
 
     def snapshot_thetas(self) -> list[np.ndarray | None]:
         """Best theta at each checkpoint. A checkpoint no later record crossed saw no change
