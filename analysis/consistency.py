@@ -36,6 +36,23 @@ LAMBDAS = [0.0, 0.03, 0.1, 0.3, 1.0]
 N = len(ROWS)
 CELLS = [trials(r) for r in ROWS]                               # angles, [even (bins, 4), odd (bins, 4)]
 TH = np.stack([c[0] for c in CELLS])                            # (N, bins)
+SYNTH = os.environ.get('SYNTH') == '1'
+if SYNTH:
+    # Known truth: each neuron's arm-E fit on its even half (clipped into the model's ranges), with
+    # both exponents redrawn uniformly in [0.7, 3]; trials = truth + Gaussian noise with that
+    # neuron's per-bin trial SD (pooled over its 8 real trials). Same 4 trials per bin per half.
+    OUT = 'analysis/consistency_synth'
+    os.makedirs(OUT, exist_ok=True)
+    _rng = np.random.default_rng(2026)
+    TRUTH = np.load('analysis/consistency/E.npz')['even'].copy()
+    TRUTH[:, 0] %= 2 * np.pi; TRUTH[:, 1:4] = TRUTH[:, 1:4].clip(min=0)
+    TRUTH[:, 4:8] = TRUTH[:, 4:8].clip(MIN_W, MAX_W); TRUTH[:, 8:10] = _rng.uniform(0.7, 3.0, (N, 2))
+    with torch.no_grad():
+        _f = gen_gauss(torch.tensor(TH), torch.tensor(TRUTH)).squeeze(0).numpy()
+    _sd = [np.concatenate(c[1], 1).std(1, ddof=1) for c in CELLS]
+    CELLS = [(TH[i], [_f[i][:, None] + _sd[i][:, None] * _rng.standard_normal((len(_sd[i]), 4)) for _ in range(2)])
+             for i in range(N)]
+    np.save(f'{OUT}/truth.npy', TRUTH)
 HALF = {h: np.stack([c[1][k].mean(1) for c in CELLS]) for k, h in enumerate(('even', 'odd'))}
 NB = TH.shape[1]
 P0 = {h: np.array([estimator(TH[i], HALF[h][i]) for i in range(N)], dtype=np.float64) for h in HALF}

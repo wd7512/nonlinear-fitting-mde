@@ -7,7 +7,10 @@ from scipy.stats import spearmanr
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from consistency import TH, HALF, CELLS, P0, N, P_MIN, P_MAX, gen_gauss, OUT
+import consistency as _c
+from consistency import TH, HALF, CELLS, P0, N, P_MIN, P_MAX, gen_gauss, OUT, SYNTH
+TRUTH = _c.TRUTH if SYNTH else None
+PNG = 'analysis/consistency_synth' if SYNTH else 'analysis/consistency'
 
 LABEL = {'A': 'A  Adam notebook', 'B': 'B  our notebook (penalised, λ=1)', 'C': 'C  symbfitrs today (clipped)',
          'D': 'D  bounds', 'E': 'E  bounds + 8 starts', 'F': 'F  bounds + 8 starts + CV penalty'}
@@ -115,6 +118,15 @@ for a in arms:
         p_vs_A_share_gt05=float(np.mean(s['p_vs_A'] > 0.5)) if 'p_vs_A' in s else None,
         **({'lam': float(R[a]['lam'])} if a == 'F' else {}),
     ))
+    if SYNTH:      # recovery of the known exponents (peaks paired to the truth's)
+        _, pt, _, pf = paired(TRUTH, Pe)
+        err = pf.min(1) - pt.min(1)
+        rows[-1].update(rmse_minp=float(np.sqrt(np.mean(err ** 2))), bias_minp=float(np.median(err)),
+                        within05=float(np.mean(np.abs(err) <= 0.5)),
+                        rmse_minp_double=float(np.sqrt(np.mean(err[dbl] ** 2))),
+                        repro_err=float(np.sqrt(np.mean(err[repro] ** 2))) if repro.any() else None,
+                        truth_median_double=float(np.median(pt.min(1)[dbl])),
+                        truth_median_repro=float(np.median(pt.min(1)[repro])) if repro.any() else None)
 
 print(f'reference: best even-half MSE over {len(cands)} fits per cell; {N} neurons')
 hdr = ('arm', 'secs', 'R2', 'dR2vsA', 'in0.1%', '>5%worse', 'double', 'rho', 'ICC', '|dp|', 'repro', 'popMed', 'rrSD', 'rr>0.5', 'bootSD', 'curveVsA', 'p>0.5vsA')
@@ -124,6 +136,12 @@ for r in rows:
          r['icc'], r['med_abs_dp'], r['reproducible'], r['pop_median_repro'], r['rr_median_sd'], r['rr_share_range_gt_05'],
          r['boot_median_sd'], r['curve_vs_A_median'], r['p_vs_A_share_gt05']]
     print(''.join(f'{str(x):>10}' if isinstance(x, str) or x is None else (f'{x:>10d}' if isinstance(x, int) else f'{x:>10.4g}') for x in v))
+if SYNTH:
+    print(f'truth: population median min p = {np.median(TRUTH[:, 8:10].min(1)):.3f}')
+    for r in rows:
+        print(r['arm'], {k: round(r[k], 3) if isinstance(r[k], float) else r[k] for k in
+                         ('rmse_minp', 'bias_minp', 'within05', 'rmse_minp_double', 'repro_err', 'truth_median_double',
+                          'pop_median_all_double', 'truth_median_repro', 'pop_median_repro')})
 for r in rows:
     print(r['arm'], 'dR2 CI', r['d_r2_ci'], 'pop median CI', r['pop_median_repro_ci'], 'curve<1 noise vs A', r['curve_vs_A_share_lt1'], r.get('lam', ''))
 json.dump(rows, open(f'{OUT}/summary.json', 'w'), indent=1)
@@ -158,8 +176,8 @@ for a in arms:
 ax.plot([0, 4], [0, 4], color='#666666', lw=1, ls='--'); ax.set_xlim(0, 4.1); ax.set_ylim(0, 4.1)
 ax.set_xlabel('min(p), even-half fit'); ax.set_ylabel('min(p), odd-half fit'); ax.legend(title='arm', frameon=False, fontsize=9)
 ax.set_title('Split-half min(p): Adam (A) vs bounds + starts (E)', fontsize=11, loc='left')
-fig.suptitle('Same 300 Stringer-2019 neurons, same halves: accuracy, optimum quality and self-consistency', fontsize=13, x=0.01, ha='left')
-fig.savefig('analysis/consistency.png', bbox_inches='tight')
+fig.suptitle(('SYNTHETIC (known p): ' if SYNTH else '') + 'Same 300 Stringer-2019 neurons, same halves: accuracy, optimum quality and self-consistency', fontsize=13, x=0.01, ha='left')
+fig.savefig(f'{PNG}.png', bbox_inches='tight')
 
 # example cells: the curves of A, B, C and E against the data, where A and E differ most and at the median
 if 'A' in R and 'E' in R:
@@ -174,5 +192,5 @@ if 'A' in R and 'E' in R:
                     label=f'{a}: R² {S[a]["test_r2"][i]:.3f}, p {p[0, 0]:.2f}/{p[0, 1]:.2f}')
         ax.set_title(f'row {i}: curve gap A vs E = {d[i]:.2f} noise SE', fontsize=10, loc='left')
         ax.set_xticks([0, np.pi, 2 * np.pi]); ax.set_xticklabels(['0', '180', '360']); ax.legend(fontsize=7, frameon=False)
-    fig.tight_layout(); fig.savefig('analysis/consistency_examples.png', bbox_inches='tight')
+    fig.tight_layout(); fig.savefig(f'{PNG}_examples.png', bbox_inches='tight')
 print('saved analysis/consistency.png, consistency_examples.png and', f'{OUT}/summary.json')
