@@ -9,7 +9,7 @@ results = symbfitrs.Pool(threads=8).fit_many([(expr_or_model, x, y), ...], budge
 from __future__ import annotations
 
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from importlib.metadata import version
 
@@ -157,13 +157,39 @@ class Model:
         budget_ms: float = 5.0,
         trace: bool = False,
         max_steps: int | None = None,
+        bounds: Mapping[str, tuple[float | None, float | None]] | None = None,
+        max_step: float | None = None,
     ) -> FitResult:
         """Minimise Σ (w (f(x; θ) − y))² from `p0` (default: all ones) within `budget_ms`.
 
         `trace=True` also returns θ at step 0 (the start) and after every accepted update;
-        `max_steps` stops after that many accepted updates (status "max_steps")."""
+        `max_steps` stops after that many accepted updates (status "max_steps").
+
+        Prototype options. `bounds={name: (lo, hi)}` (None = unbounded on that side) keeps every
+        iterate inside the box with an active-set step; the start is clipped into it. Bounds on a
+        linear parameter switch variable projection off. `max_step=c` shortens any step whose
+        largest single-parameter change exceeds `c`, keeping its direction."""
+        lower = upper = None
+        if bounds:
+            unknown = [n for n in bounds if n not in self.params]
+            if unknown:
+                raise ValueError(f"bounds for unknown parameters {unknown}")
+            lower = [
+                -np.inf if bounds.get(n, (None, None))[0] is None else float(bounds[n][0])
+                for n in self.params
+            ]
+            upper = [
+                np.inf if bounds.get(n, (None, None))[1] is None else float(bounds[n][1])
+                for n in self.params
+            ]
         raw = self._core.fit(
-            *_args(self.variables, x, y, weights, p0), float(budget_ms), trace, max_steps
+            *_args(self.variables, x, y, weights, p0),
+            float(budget_ms),
+            trace,
+            max_steps,
+            lower,
+            upper,
+            None if max_step is None else float(max_step),
         )
         return _result(raw)
 

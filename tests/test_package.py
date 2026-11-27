@@ -179,3 +179,39 @@ def test_fit_many_trace_matches_fit():
         assert got.status == want.status == "max_steps" and got.steps == 4
         np.testing.assert_array_equal(got.trace, want.trace)
     assert sf.Pool(threads=1).fit_many(jobs, progress=False)[0].trace is None
+
+
+def test_bounds_keep_the_fit_inside_the_box_and_validate_names():
+    x, y = _exp_problem()
+    m = sf.compile("a*exp(-b*x) + c")
+    r = m.fit(x, y, p0=[1, 0.2, 0], bounds={"b": (None, 0.5)}, trace=True)  # the true b is 0.7
+    assert r["b"] == pytest.approx(0.5) and np.all(r.trace[:, m.params.index("b")] <= 0.5 + 1e-12)
+    with pytest.raises(ValueError, match="unknown"):
+        m.fit(x, y, bounds={"nope": (0, 1)})
+    # bounds that never bind change nothing
+    assert (
+        m.fit(x, y, p0=[1, 1, 0], bounds={"b": (-1e6, 1e6)}).steps
+        == m.fit(x, y, p0=[1, 1, 0]).steps
+    )
+
+
+def test_a_bounded_linear_parameter_and_the_step_cap():
+    x, y = _exp_problem()
+    m = sf.compile("a*exp(-b*x) + c")
+    r = m.fit(x, -y, bounds={"a": (0, None)})  # the true amplitude is negative: held at its bound
+    assert abs(r["a"]) < 1e-12
+    full = sf.compile("exp(-b*x)*sin(c*x)")
+    t = np.linspace(0, 6, 60)
+    r = full.fit(
+        t,
+        np.exp(-0.4 * t) * np.sin(1.3 * t),
+        p0=[0.8, 1.0],
+        max_step=0.05,
+        trace=True,
+        budget_ms=500,
+    )
+    assert np.abs(np.diff(r.trace, axis=0)).max() <= 0.05 + 1e-12 and r["b"] == pytest.approx(
+        0.4, abs=1e-6
+    )
+    with pytest.raises(ValueError):
+        m.fit(x, y, max_step=0.0)

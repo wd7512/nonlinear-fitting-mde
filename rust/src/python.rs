@@ -67,7 +67,7 @@ impl Model {
         py.detach(move || driver::predict(&c, &x, &params)).map_err(PyValueError::new_err)
     }
 
-    #[pyo3(signature = (x, y, w, p0, budget_ms, trace=false, max_steps=None))]
+    #[pyo3(signature = (x, y, w, p0, budget_ms, trace=false, max_steps=None, lower=None, upper=None, max_step=None))]
     #[allow(clippy::too_many_arguments)] // the pyo3 signature mirrors `Model.fit`
     fn fit(
         &self,
@@ -79,8 +79,11 @@ impl Model {
         budget_ms: f64,
         trace: bool,
         max_steps: Option<usize>,
+        lower: Option<Vec<f64>>,
+        upper: Option<Vec<f64>>,
+        max_step: Option<f64>,
     ) -> PyResult<PyOutcome> {
-        let d = Data { trace, max_steps, ..data((x, y, w, p0))? };
+        let d = Data { trace, max_steps, lower, upper, max_step, ..data((x, y, w, p0))? };
         let c = self.0.clone();
         py.detach(move || driver::fit_one(&c, d, budget_ms)).map(out).map_err(PyValueError::new_err)
     }
