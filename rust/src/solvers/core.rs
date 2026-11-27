@@ -62,7 +62,9 @@ fn run<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
         for j in 0..n {
             let cn = jac.column(j).norm();
             d[j] = d[j].max(if cn > 0.0 { cn } else { 1.0 });
-            js.column_mut(j).copy_from(&(jac.column(j) / d[j]));
+            let mut col = js.column_mut(j);
+            col.copy_from(&jac.column(j));
+            col.unscale_mut(d[j]);
         }
         // gradient (cosine) test on the scaled problem
         let rn = r.norm();
