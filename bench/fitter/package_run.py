@@ -1,6 +1,6 @@
-"""Success against time when N fits run at once, through the installed package.
+"""Run the benchmark through the installed package (`symbfitrs.Pool.fit_many`) on N workers.
 
-  uv run python -m bench.fitter.threads [SUITE ...] [--threads 1 2 3 4]
+  uv run python -m bench.fitter.package_run [SUITE ...] [--threads 1 2 3 4]
 
 For every suite and every N, fits each (problem, start) with ``Pool(threads=N).fit_many`` and
 writes ``results/<suite>_threads/records.jsonl`` in the benchmark's record schema, one solver

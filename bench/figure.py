@@ -1,7 +1,7 @@
 """The README figure: success against time for every solver, averaged over the six suites.
 
   uv run python -m bench.figure    # after `bench run SUITE` and `bench run SUITE --fitter`
-  uv run python -m bench.figure --threads    # after `python -m bench.fitter.threads`
+  uv run python -m bench.figure --threads    # after `python -m bench.fitter.package_run`
 
 Reads ``results/<suite>_rust/records.jsonl`` (fitter and SciPy records merged) and judges each
 suite by its own first target and success rule. Writes a light and a dark PNG to ``docs/``.

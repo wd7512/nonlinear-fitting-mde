@@ -1,6 +1,6 @@
 """How fast a queue of fits clears with N workers, and whether the results stay the same.
 
-  uv run python -m bench.fitter.threads --budget-ms 100 --kind throughput   # the run
+  uv run python -m bench.fitter.package_run --budget-ms 100 --kind throughput   # the run
   uv run python -m bench.throughput                                         # table + figure
 
 Reads ``results/<suite>_throughput/records.jsonl``: every fit of every suite is queued on

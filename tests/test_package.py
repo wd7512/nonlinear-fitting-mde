@@ -84,8 +84,8 @@ def test_nist_certified_rss_from_both_starts():
 
 
 def test_thread_record_matches_benchmark_schema():
-    """bench.fitter.threads turns a FitResult into the record bench.scoring reads."""
-    from bench.fitter.threads import expression, record
+    """bench.fitter.package_run turns a FitResult into the record bench.scoring reads."""
+    from bench.fitter.package_run import expression, record
     from bench.models import SymbolicModel
     from bench.problem import Problem
 
