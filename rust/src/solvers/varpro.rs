@@ -81,10 +81,15 @@ impl<'a> VarPro<'a> {
             self.theta[i] = a;
         }
         let rank = fac.rank();
-        let u = fac.u.expect("u requested").columns(0, fac.s.len()).into_owned();
-        // keep only the numerically independent directions of range(Φ)
-        let keep: Vec<usize> = (0..fac.s.len()).filter(|&i| fac.s[i] > fac.tol).collect();
-        let u = if rank == fac.s.len() { u } else { u.select_columns(&keep) };
+        let basis = fac.u.expect("u requested");
+        let u = if rank == fac.s.len() {
+            debug_assert_eq!(basis.ncols(), rank);
+            basis
+        } else {
+            // keep only the numerically independent directions of range(Φ)
+            let keep: Vec<usize> = (0..fac.s.len()).filter(|&i| fac.s[i] > fac.tol).collect();
+            basis.columns(0, fac.s.len()).into_owned().select_columns(&keep)
+        };
         self.trial = Some(Proj { alpha, u });
         r.norm_squared()
     }
@@ -124,14 +129,15 @@ impl Lsq for VarPro<'_> {
         self.tr.check()?;
         let cur = self.current.as_ref().expect("jacobian before an accepted residual");
         let prob = &mut *self.prob;
-        let mut theta = vec![0.0; prob.p];
+        // nonlin and lin indices partition theta, so every entry is overwritten
+        let theta = &mut self.theta;
         for (&i, &b) in prob.nonlin.iter().zip(beta.iter()) {
             theta[i] = b;
         }
         for (&i, &a) in prob.lin.iter().zip(cur.alpha.iter()) {
             theta[i] = a;
         }
-        prob.jacobian_nonlinear(&theta, &mut self.dnl);
+        prob.jacobian_nonlinear(theta, &mut self.dnl);
         // J = D − U (Uᵀ D)
         let utd = cur.u.tr_mul(&self.dnl);
         j.copy_from(&self.dnl);

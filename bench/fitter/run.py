@@ -22,6 +22,10 @@ BINARY = RUST_DIR / "target" / "release" / "symbfitrs-bench"
 
 def ensure_binary() -> Path:
     """Build (or confirm up to date) the release binary; a no-op when nothing changed."""
+    import os
+
+    if override := os.environ.get("SYMBFITRS_BENCH_BIN"):  # prebuilt variant binary
+        return Path(override)
     subprocess.run(["cargo", "build", "--release", "--quiet"], cwd=RUST_DIR, check=True)
     return BINARY
 
