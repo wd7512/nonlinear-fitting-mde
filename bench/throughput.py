@@ -11,6 +11,7 @@ agreement compares each fit's final loss with the same fit's N=1 result.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import matplotlib
@@ -89,7 +90,9 @@ def draw(wall: dict[int, float], path: Path, theme: dict, mode: str, n_fits: int
         ax.spines[side].set_visible(False)
     ax.spines["bottom"].set_color(theme["muted"])
     ax.tick_params(colors=theme["muted"], labelsize=9, length=0)
-    ax.set_xlabel("workers", color=theme["muted"], fontsize=9)
+    ax.set_xlabel(
+        f"workers ({os.cpu_count()} CPUs on this machine)", color=theme["muted"], fontsize=9
+    )
     ax.set_title(f"Speed-up in clearing a queue of {n_fits:,} fits, by number of workers"
                  " (wall time under each point)", loc="left", color=theme["text"],
                  fontsize=11, pad=12)  # fmt: skip

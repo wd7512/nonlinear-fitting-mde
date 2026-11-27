@@ -105,9 +105,9 @@ def draw(curves: dict[str, np.ndarray], path: Path, theme: dict) -> None:
 
 
 # one hue, light to dark: the more fits at once, the lighter; one at a time is the darkest
-THREAD_RAMPS = {  # lightest (most in parallel) first
-    "light": ["#84b9f3", "#519ced", "#2370cd", "#0f4a96"],
-    "dark": ["#a8cdf8", "#6aa8f2", "#338ced", "#1d6fd0"],
+THREAD_RAMPS = {  # lightest (most in parallel) first; the darkest k serve k lines
+    "light": ["#82b4ee", "#639fe8", "#4586dc", "#2466c4", "#0b3f86"],
+    "dark": ["#c9e0fb", "#a0c8f6", "#6aa8f2", "#338ced", "#1d6fd0"],
 }
 
 
