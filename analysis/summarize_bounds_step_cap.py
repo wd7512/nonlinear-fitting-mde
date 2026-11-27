@@ -22,8 +22,8 @@ def curve(prefix,none_label):
     xs=[];ys=[];st=[];dd=[]
     for cp in caps:
         k=f'{prefix}{cp:g}'
-        if k in n: j=n.index(k); xs.append(cp); ys.append(w(c['L'][j])); st.append(np.median(c['steps'][j])); dd.append(100*np.mean(c['first_dead'][j]==1))
-    j=n.index(none_label); xs.append(INF); ys.append(w(c['L'][j])); st.append(np.median(c['steps'][j])); dd.append(100*np.mean(c['first_dead'][j]==1)); return xs,ys,st,dd
+        if k in n: j=n.index(k); xs.append(cp); ys.append(w(c['L'][j])); st.append(np.median(c['steps'][j])); dd.append(100*np.mean((c['first_dead'][j]==0)|(c['first_dead'][j]==1)))
+    j=n.index(none_label); xs.append(INF); ys.append(w(c['L'][j])); st.append(np.median(c['steps'][j])); dd.append(100*np.mean((c['first_dead'][j]==0)|(c['first_dead'][j]==1))); return xs,ys,st,dd
 a=curve('step cap ','LM, clipped model (current symbfitrs)'); bq=curve('bounds + step cap ','bounds (active-set)')
 ux=[0.03,0.1,0.3,1.0,INF]; uk=['unclipped model, bounds + cap 0.03','unclipped model, bounds + cap 0.1','unclipped model, bounds + cap 0.3','unclipped model, bounds + cap 1.0','unclipped model, bounds']
 uy=[w(u['L'][un.index(k)]) for k in uk]
@@ -34,8 +34,8 @@ ax[0].set_xscale('log'); ax[0].set_xticks(caps+[INF]); ax[0].set_xticklabels([f'
 ax[1].plot(a[0],a[2],'o-',color='#8a8a8a'); ax[1].plot(bq[0],bq[2],'o-',color='#1a5fb4'); ax[1].set_xscale('log'); ax[1].set_yscale('log'); ax[1].set_xticks(caps+[INF]); ax[1].set_xticklabels([f'{x:g}' for x in caps]+['no cap'],rotation=45)
 ax[1].axhline(15000,color='#c05a00',ls='--',label='Adam: fixed budget, 15,000 steps'); ax[1].axhline(adam_match,color='#c05a00',ls=':',label=f'Adam: median {adam_match:.0f} steps to match LM ({100*np.mean(match>0):.0f}% of neurons)')
 ax[1].set_ylim(top=3e4); ax[1].legend(fontsize=7,loc='center right'); ax[1].set_ylabel('median accepted steps'); ax[1].set_xlabel('max change of any parameter per step'); ax[1].set_title(f'Cost: LM 3.4 ms at no cap, 5 ms at 0.1, 19 ms at 0.01; Adam ~{adam_ms:.0f} ms/neuron\n(batched over 300 neurons, amortised; CPU)',fontsize=8)
-ax[2].plot(a[0],a[3],'o-',color='#8a8a8a'); ax[2].set_xscale('log'); ax[2].set_xticks(caps+[INF]); ax[2].set_xticklabels([f'{x:g}' for x in caps]+['no cap'],rotation=45); ax[2].axhline(adam_step1,color='#c05a00',ls='--',label=f'Adam at its first step: {adam_step1:.1f}%'); ax[2].text(0.02,0.62,f'Adam: {adam_start:.0f}% of neurons start with a parameter\nin a dead zone and {adam_end:.0f}% end with one',transform=ax[2].transAxes,fontsize=8,color='#c05a00')
-ax[2].legend(fontsize=7,loc='upper left'); ax[2].set_ylabel('% of neurons'); ax[2].set_xlabel('max change of any parameter per step')
-ax[2].set_title('Parameter leaves its clip range at the first LM step\n(clipped model, no bounds)')
+ax[2].plot(a[0],a[3],'o-',color='#8a8a8a'); ax[2].set_xscale('log'); ax[2].set_xticks(caps+[INF]); ax[2].set_xticklabels([f'{x:g}' for x in caps]+['no cap'],rotation=45); ax[2].axhline(100*np.mean(d1),color='#c05a00',ls='--',label=f'Adam after its first step: {100*np.mean(d1):.0f}% (all of them already dead at the start)'); ax[2].text(0.02,0.62,f'Adam: {adam_end:.0f}% of neurons end the fit\nwith a parameter in a dead zone',transform=ax[2].transAxes,fontsize=8,color='#c05a00')
+ax[2].legend(fontsize=7,loc='upper left'); ax[2].set_ylim(0,75); ax[2].set_ylabel('% of neurons'); ax[2].set_xlabel('max change of any parameter per step')
+ax[2].set_title('A parameter is in a dead zone after the first step\n(clipped model, no bounds; 16% already start in one)')
 for x in ax: x.spines[['top','right']].set_visible(False)
 fig.suptitle('Prototype: active-set bounds and a per-step cap in symbfitrs LM, 300 Stringer neurons',fontsize=12); plt.tight_layout(); plt.savefig('analysis/bounds_step_cap.png',dpi=140); print('ok')
