@@ -108,14 +108,16 @@ def bench_package(
     problems_json: Path,
     records: Path,
     budgets,
-    threads: int = 1,
+    threads: int | dict[str, int] = 1,
     seed: int = 42,
     max_wall_s: float = float("inf"),
-    solver: str = FITTER,
 ) -> list[dict]:
     """Fit every (problem, start) with ``symbfitrs.Pool(threads).fit_many``; records follow the
-    Python harness schema. Each fit gets the largest budget; ``theta_at`` (parameters at each
-    checkpoint, for problems with reference parameters) comes from refits at the smaller ones."""
+    Python harness schema. ``threads`` is a thread count, or {solver label: thread count} to run
+    the same jobs once per entry. Each fit gets the largest budget; ``theta_at`` (parameters at
+    each checkpoint, for problems with reference parameters) comes from refits at the smaller
+    ones. ``wall_s`` in the meta record is the time spent in ``fit_many`` per thread count."""
+    runs = {FITTER: threads} if isinstance(threads, int) else threads
     t_start = time.perf_counter()
     sf, pkg = local_package()
     doc = json.loads(problems_json.read_text())
@@ -137,15 +139,6 @@ def bench_package(
         y = np.array(pb["y"], dtype=np.float64)
         w = None if pb["w"] is None else np.array(pb["w"], dtype=np.float64)
         probs.append((pb, models[key], x, y, w))
-    t_setup = time.perf_counter() - t0
-
-    deadline = max(budgets)
-    pool = sf.Pool(threads=threads)
-    t0 = time.perf_counter()
-    if probs:  # warm-up: caches, page faults, thread start
-        pb, model, x, y, w = probs[0]
-        pool.fit_many([(model, x, y, pb["starts"][0][1], w)], budget_ms=5.0, progress=False)
-    t_warm = time.perf_counter() - t0
 
     jobs = [(i, s) for i, (pb, *_) in enumerate(probs) for s in range(len(pb["starts"]))]
     jobs = [jobs[k] for k in np.random.default_rng(seed).permutation(len(jobs))]
@@ -158,53 +151,70 @@ def bench_package(
                 r = r * w
             return float(np.mean(r * r) / pb["denom"])
 
-    def fit_jobs(batch, budget):
-        spec = [(probs[i][1], *probs[i][2:4], probs[i][0]["starts"][s][1], probs[i][4])
-                for i, s in batch]  # fmt: skip
-        return pool.fit_many(spec, budget_ms=budget, progress=False)
-
+    losses0 = [loss0(i, s) for i, s in jobs]
+    t_setup = time.perf_counter() - t0
+    deadline = max(budgets)
     meta = dict(doc["meta"])
-    meta["config"] = {**meta.get("config", {}), "solvers": [solver], "budgets_ms": list(budgets)}
+    meta["config"] = {**meta.get("config", {}), "solvers": list(runs), "budgets_ms": list(budgets)}
     meta.update(
         type="meta",
         engine="symbfitrs (python package)",
         package=pkg,
-        threads=threads,
-        n_jobs=len(jobs),
+        threads=runs,
+        n_jobs=len(jobs) * len(runs),
         n_problems=len(probs),
         skipped=skipped,
         import_s=t_import,
         problem_setup_s=t_setup,
-        warmup_s=t_warm,
         deadline_ms=deadline,
         theta_at="refit at each smaller budget, problems with reference parameters only",
         threadpools=[],
-        thread_env={"symbfitrs": f"Pool(threads={threads})"},
+        thread_env={solver: f"Pool(threads={n})" for solver, n in runs.items()},
         python=platform.python_version(),
         numpy=np.__version__,
         machine=platform.machine(),
+        wall_s={},
     )
     out = [meta]
     t_loop = time.perf_counter()
     done = 0
-    for c in range(0, len(jobs), CHUNK):
-        if time.perf_counter() - t_start >= max_wall_s:
-            out.append({"type": "truncated", "completed": done, "n_jobs": len(jobs)})
+    for solver, n in runs.items():
+        pool = sf.Pool(threads=n)
+        if probs:  # warm-up: caches, page faults, thread start
+            pb, model, x, y, w = probs[0]
+            pool.fit_many([(model, x, y, pb["starts"][0][1], w)], budget_ms=5.0, progress=False)
+
+        def fit_jobs(batch, budget, pool=pool):
+            spec = [(probs[i][1], *probs[i][2:4], probs[i][0]["starts"][s][1], probs[i][4])
+                    for i, s in batch]  # fmt: skip
+            return pool.fit_many(spec, budget_ms=budget, progress=False)
+
+        fit_s = 0.0
+        for c in range(0, len(jobs), CHUNK):
+            if time.perf_counter() - t_start >= max_wall_s:
+                out.append({"type": "truncated", "completed": done, "n_jobs": meta["n_jobs"]})
+                break
+            batch = jobs[c : c + CHUNK]
+            t0 = time.perf_counter()
+            results = fit_jobs(batch, deadline)
+            fit_s += time.perf_counter() - t0
+            # parameters at each smaller checkpoint, for problems scored on them (NIST LRE)
+            need = [k for k, (i, _) in enumerate(batch) if probs[i][0]["record"].get("ref_params")]
+            snaps = {k: [] for k in need}
+            for b in [b for b in budgets if b < deadline] if need else []:
+                for k, r in zip(need, fit_jobs([batch[k] for k in need], b), strict=True):
+                    snaps[k].append(r.params.tolist() if r.history_loss.size else None)
+            for k, ((i, s), r) in enumerate(zip(batch, results, strict=True)):
+                pb, model = probs[i][:2]
+                best = r.params.tolist() if r.history_loss.size else None
+                theta_at = snaps[k] + [best] if k in snaps else None
+                out.append(_fit_record(pb, model, pb["starts"][s][0], losses0[c + k], r,
+                                       theta_at, solver))  # fmt: skip
+                done += 1
+        meta["wall_s"][n] = fit_s
+        if out[-1]["type"] == "truncated":
             break
-        batch = jobs[c : c + CHUNK]
-        results = fit_jobs(batch, deadline)
-        # parameters at each smaller checkpoint, for problems scored on them (NIST LRE)
-        need = [k for k, (i, _) in enumerate(batch) if probs[i][0]["record"].get("ref_params")]
-        snaps = {k: [] for k in need}
-        for b in [b for b in budgets if b < deadline] if need else []:
-            for k, r in zip(need, fit_jobs([batch[k] for k in need], b), strict=True):
-                snaps[k].append(r.params.tolist() if r.history_loss.size else None)
-        for k, ((i, s), r) in enumerate(zip(batch, results, strict=True)):
-            pb, model = probs[i][:2]
-            best = r.params.tolist() if r.history_loss.size else None
-            theta_at = snaps[k] + [best] if k in snaps else None
-            out.append(_fit_record(pb, model, pb["starts"][s][0], loss0(i, s), r, theta_at, solver))
-            done += 1
+        print(f"{solver}: {len(jobs)} fits on {n} thread(s), {fit_s:.2f} s in fit_many")
     out.append(
         {
             "type": "end",
@@ -214,8 +224,6 @@ def bench_package(
         }
     )
     records.write_text("".join(json.dumps(r) + "\n" for r in out))
-    print(f"{solver}: {done}/{len(jobs)} fits on {threads} thread(s) in "
-          f"{time.perf_counter() - t_loop:.2f} s -> {records}")  # fmt: skip
     return out
 
 

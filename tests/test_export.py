@@ -89,3 +89,24 @@ def test_estimate_peaks_finds_preferred_angle():
     y = 0.1 + 2 * np.exp(-0.5 * (np.angle(np.exp(1j * (th - 2.0))) / 0.4) ** 2)
     pk = stringer2019.estimate_peaks(th, y)
     assert abs(pk.m - 2.0) < 0.3 and pk.a1 > 1.5
+
+
+def test_package_records_match_benchmark_schema(tmp_path):
+    """bench.fitter.run.bench_package turns FitResults into the records bench.scoring reads."""
+    from bench.fitter.export import export_problems
+    from bench.fitter.run import bench_package
+    from bench.problem import Problem
+
+    x = np.linspace(0, 5, 60)
+    model = SymbolicModel("exp", "a*exp(-b*x) + c", ["a", "b", "c"], ["x"], x)
+    pb = Problem(
+        "p", "d", "m", "c", model, 2.0 * np.exp(-0.7 * x) + 0.3, {"s": np.ones(3)}, ref_mode="zero"
+    )
+    export_problems([pb], {"config": {}}, tmp_path / "problems.json")
+    recs = bench_package(tmp_path / "problems.json", tmp_path / "r.jsonl", [50], {"sf_t2": 2})
+    (rec,) = [r for r in recs if r["type"] == "fit"]
+    assert (rec["solver"], rec["problem"], rec["status"]) == ("sf_t2", "p", "converged")
+    assert rec["hist_loss"][-1] == pytest.approx(rec["best_loss"])
+    assert rec["hist_t_ms"] == sorted(rec["hist_t_ms"]) and len(rec["hist_t_ms"]) > 1
+    assert rec["loss0"] == pytest.approx(pb.loss_at(np.ones(3)))
+    assert rec["n_linear"] == 2

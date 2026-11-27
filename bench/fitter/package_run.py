@@ -11,7 +11,6 @@ For every suite and every N, fits each (problem, start) with ``Pool(threads=N)``
 from __future__ import annotations
 
 import argparse
-import json
 import tempfile
 from pathlib import Path
 
@@ -27,29 +26,12 @@ def run_suite(suite: str, threads: list[int], out: Path, budget_ms: float | None
 
     cfg = load_config(CONFIG_DIR / f"{suite}.toml")
     deadline = max(CPU_BUDGET_MS, *cfg.budgets_ms) if budget_ms is None else budget_ms
-    meta, fits = None, []
+    out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         problems = Path(tmp) / "problems.json"
         export_config(cfg, problems)
-        walls = {}
-        for n in threads:
-            recs = bench_package(problems, Path(tmp) / f"t{n}.jsonl", [deadline], n, cfg.seed,
-                                 solver=SOLVER.format(n=n))  # fmt: skip
-            meta = meta or recs[0]
-            walls[n] = next(r["loop_s"] for r in recs if r["type"] == "end")
-            fits += [r for r in recs if r["type"] == "fit"]
-    solvers = [SOLVER.format(n=n) for n in threads]
-    meta = {
-        **meta,
-        "experiment": f"{suite}_threads",
-        "config": {**meta["config"], "solvers": solvers},
-        "threads": threads,
-        "wall_s": walls,
-        "n_jobs": len(fits),
-    }
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "records.jsonl").write_text("".join(json.dumps(r) + "\n" for r in [meta, *fits]))
-    return meta
+        runs = {SOLVER.format(n=n): n for n in threads}
+        return bench_package(problems, out / "records.jsonl", [deadline], runs, cfg.seed)[0]
 
 
 def main(argv: list[str] | None = None) -> None:
