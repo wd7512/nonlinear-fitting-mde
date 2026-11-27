@@ -113,3 +113,9 @@ def test_fit_many_takes_models_with_their_own_variables_and_weights():
     out = sf.Pool(threads=2).fit_many(jobs, budget_ms=50, progress=False)
     np.testing.assert_allclose(out[0].params, [3.0, 1.0], rtol=1e-10)
     np.testing.assert_allclose(out[1].params, [2.0, 0.7, 0.3], rtol=1e-8)
+
+
+def test_atan2_matches_numpy():
+    x = np.linspace(-3, 3, 41)
+    m = sf.compile("atan2(a*x - 1, b)")
+    np.testing.assert_allclose(m.predict(x, [1.2, -0.5]), np.arctan2(1.2 * x - 1, -0.5), rtol=1e-15)

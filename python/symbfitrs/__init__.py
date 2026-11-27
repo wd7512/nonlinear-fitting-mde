@@ -140,9 +140,9 @@ def compile(  # noqa: A001 (the natural name for the API)
 ) -> Model:
     """Parse `expr`. Names in `variables` are data; every other name is a parameter, in order
     of first appearance unless `params` gives the order. Supports + - * / ^ (or **), exp, log,
-    sqrt, sin, cos, tan, sinh, cosh, tanh, asin, acos, atan, abs, sign, erf, erfc, max, min, pow,
-    wrap (angle to (−π, π]), step (1 for x ≥ 0), expwerfc(a, b) = exp(a)·erfc(b) and pi. Raises
-    ValueError on a malformed expression."""
+    sqrt, sin, cos, tan, sinh, cosh, tanh, asin, acos, atan, atan2, abs, sign, erf, erfc, max,
+    min, pow, wrap (angle to (−π, π]), step (1 for x ≥ 0), expwerfc(a, b) = exp(a)·erfc(b) and
+    pi. Raises ValueError on a malformed expression."""
     return Model(_core.compile(expr, list(variables), None if params is None else list(params)))
 
 

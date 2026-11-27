@@ -27,6 +27,7 @@ pub enum Op {
     Max(u32, u32),
     Min(u32, u32),
     ExpWErfc(u32, u32),
+    Atan2(u32, u32),
     PowI(u32, i32),
     Neg(u32),
     Sqrt(u32),
@@ -55,7 +56,7 @@ impl Op {
         match *self {
             Const(_) | Var(_) | Param(_) => (None, None),
             Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | PowF(a, b) | Max(a, b) | Min(a, b)
-            | ExpWErfc(a, b) => (Some(a), Some(b)),
+            | ExpWErfc(a, b) | Atan2(a, b) => (Some(a), Some(b)),
             PowI(a, _) | Neg(a) | Sqrt(a) | Exp(a) | Log(a) | Sin(a) | Cos(a) | Tan(a)
             | Tanh(a) | Sinh(a) | Cosh(a) | Atan(a) | Asin(a) | Acos(a) | Abs(a) | Sign(a)
             | Erf(a) | Erfc(a) | Wrap(a) | Step(a) => (Some(a), None),
@@ -224,6 +225,7 @@ impl Bound {
             Max(a, b) => binary(buf, o, at(a), at(b), w, f64::max),
             Min(a, b) => binary(buf, o, at(a), at(b), w, f64::min),
             ExpWErfc(a, b) => binary(buf, o, at(a), at(b), w, expwerfc),
+            Atan2(a, b) => binary(buf, o, at(a), at(b), w, f64::atan2),
             PowI(a, n) => {
                 let a = at(a).0;
                 match n {

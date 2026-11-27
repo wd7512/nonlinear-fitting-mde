@@ -8,7 +8,7 @@
 //! Grammar: numbers, names, `+ - * / ^ **`, parentheses, unary minus, and the functions
 //! `exp log ln sqrt sin cos tan tanh sinh cosh atan arctan asin arcsin acos arccos abs sign
 //! erf erfc`, `wrap` (angle wrapped to (−π, π], derivative 1), `step` (1 where the argument is
-//! ≥ 0, else 0), and two-argument `max min pow` and `expwerfc` (exp(a)·erfc(b) without
+//! ≥ 0, else 0), and two-argument `max min pow atan2` and `expwerfc` (exp(a)·erfc(b) without
 //! overflow). `pi` is π. A name is a variable when listed as one and a parameter otherwise, in
 //! order of first appearance unless the order is given.
 
@@ -52,6 +52,7 @@ enum Bin {
     Max,
     Min,
     ExpWErfc,
+    Atan2,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -114,6 +115,7 @@ fn bin_f(op: Bin, a: f64, b: f64) -> f64 {
         Bin::Max => a.max(b),
         Bin::Min => a.min(b),
         Bin::ExpWErfc => expwerfc(a, b),
+        Bin::Atan2 => a.atan2(b),
     }
 }
 
@@ -343,6 +345,16 @@ impl Graph {
                 let s = self.bin(Bin::Add, x, y);
                 self.bin(Bin::Mul, f, s)
             }
+            Bin::Atan2 => {
+                // d atan2(a, b) = (b·da − a·db) / (a² + b²)
+                let bda = self.bin(Bin::Mul, b, da);
+                let adb = self.bin(Bin::Mul, a, db);
+                let num = self.bin(Bin::Sub, bda, adb);
+                let a2 = self.powi(a, 2);
+                let b2 = self.powi(b, 2);
+                let den = self.bin(Bin::Add, a2, b2);
+                self.bin(Bin::Div, num, den)
+            }
             Bin::ExpWErfc => {
                 // ∂/∂a = f; ∂/∂b = −2/√π · exp(a − b²)
                 let x = self.bin(Bin::Mul, f, da);
@@ -479,6 +491,7 @@ impl Graph {
                         Bin::Max => Op::Max(a, b),
                         Bin::Min => Op::Min(a, b),
                         Bin::ExpWErfc => Op::ExpWErfc(a, b),
+                        Bin::Atan2 => Op::Atan2(a, b),
                     }
                 }
             };
@@ -578,8 +591,13 @@ const FUNCS: &[(&str, Un)] = &[
     ("step", Un::Step),
 ];
 
-const BIN_FUNCS: &[(&str, Bin)] =
-    &[("max", Bin::Max), ("min", Bin::Min), ("pow", Bin::Pow), ("expwerfc", Bin::ExpWErfc)];
+const BIN_FUNCS: &[(&str, Bin)] = &[
+    ("max", Bin::Max),
+    ("min", Bin::Min),
+    ("pow", Bin::Pow),
+    ("atan2", Bin::Atan2),
+    ("expwerfc", Bin::ExpWErfc),
+];
 
 impl Parser<'_> {
     fn peek(&self) -> Option<&Tok> {
@@ -873,6 +891,7 @@ mod tests {
             "erf(a*x) * erfc(b - x) + atan(c*x) * abs(d - x) + x^c",
             "exp(-((x - a)/b)^2) * cosh(c) + acos(d/(1 + d^2))",
             "a*wrap(x - b) + step(x - c)*d + expwerfc(a*x, b - x)",
+            "atan2(a*x - 1, b + c*x^2) + atan2(d, a)",
         ];
         let x = [0.3, 0.7, 1.9];
         let th = [1.3, 0.7, 0.4, 0.9];
