@@ -32,10 +32,10 @@ fn data((x, y, w, p0): RawData) -> PyResult<Data> {
     })
 }
 
-type PyOutcome = (Vec<String>, Vec<f64>, f64, &'static str, String, usize, f64);
+type PyOutcome = (Vec<String>, Vec<f64>, f64, &'static str, String, usize, f64, Vec<f64>, Vec<f64>);
 
 fn out(o: Outcome) -> PyOutcome {
-    (o.names, o.params, o.loss, o.status, o.message, o.nfev, o.time_ms)
+    (o.names, o.params, o.loss, o.status, o.message, o.nfev, o.time_ms, o.hist_t_ms, o.hist_loss)
 }
 
 #[pyclass(frozen, module = "symbfitrs._core")]
@@ -58,7 +58,7 @@ impl Model {
         self.0.linear.clone()
     }
 
-    /// (names, params, loss, status, message, nfev, time_ms)
+    /// (names, params, loss, status, message, nfev, time_ms, hist_t_ms, hist_loss)
     #[pyo3(signature = (x, y, w, p0, budget_ms))]
     fn fit(
         &self,

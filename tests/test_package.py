@@ -81,3 +81,23 @@ def test_nist_certified_rss_from_both_starts():
             r = m.fit(x, nb.y, p0=nb.starts[start], budget_ms=500)
             rss = r.loss * nb.y.size
             assert rss == pytest.approx(nb.certified_rss, rel=1e-6, abs=1e-20), (nb.name, start)
+
+
+def test_thread_record_matches_benchmark_schema():
+    """bench.fitter.threads turns a FitResult into the record bench.scoring reads."""
+    from bench.fitter.threads import expression, record
+    from bench.models import SymbolicModel
+    from bench.problem import Problem
+
+    model = SymbolicModel("exp", "a*exp(-b*x) + c", ["a", "b", "c"], ["x"], X)
+    e, variables, params = expression(model)
+    r = sf.compile(e, variables, params).fit(X, Y, p0=[1, 1, 0], budget_ms=50)
+    pb = Problem("p", "d", "m", "c", model, Y, {"s": np.ones(3)}, ref_mode="zero")
+    rec = record(pb, "s", [1, 1, 0], r, "symbfitrs_t2", 1.0)
+    assert (rec["solver"], rec["problem"], rec["status"]) == ("symbfitrs_t2", "p", "converged")
+    # the package reports mean squared residual; the record divides by the problem's denominator
+    assert rec["best_loss"] == pytest.approx(r.loss / pb.denom)
+    assert rec["hist_loss"][-1] == pytest.approx(rec["best_loss"])
+    assert rec["hist_t_ms"] == sorted(rec["hist_t_ms"]) and len(rec["hist_t_ms"]) > 1
+    assert rec["loss0"] == pytest.approx(pb.loss_at(np.array([1.0, 1.0, 0.0])))
+    assert rec["theta_at"] is None and rec["n_linear"] == 2

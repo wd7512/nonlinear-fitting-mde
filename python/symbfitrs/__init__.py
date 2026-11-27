@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import version
 
 import numpy as np
@@ -36,6 +36,10 @@ class FitResult:
     message: str = ""
     nfev: int = 0
     time_ms: float = 0.0
+    # loss history: ms since the fit started and the loss at the first evaluation and at every
+    # improvement (the best-so-far loss is a step function through these points)
+    hist_t_ms: np.ndarray = field(default_factory=lambda: np.empty(0))
+    hist_loss: np.ndarray = field(default_factory=lambda: np.empty(0))
 
     @property
     def success(self) -> bool:
@@ -80,8 +84,11 @@ def _args(variables, x, y, weights, p0):
 
 
 def _result(raw) -> FitResult:
-    names, params, loss, status, message, nfev, time_ms = raw
-    return FitResult(tuple(names), np.array(params), loss, status, message, nfev, time_ms)
+    names, params, loss, status, message, nfev, time_ms, hist_t, hist_loss = raw
+    return FitResult(
+        tuple(names), np.array(params), loss, status, message, nfev, time_ms,
+        np.array(hist_t), np.array(hist_loss),
+    )  # fmt: skip
 
 
 class Model:
@@ -137,16 +144,15 @@ class Pool:
         budget_ms: float = 5.0,
         progress: bool = True,
     ) -> list[FitResult]:
-        """Each job is (expr, x, y) or (expr, x, y, p0). Results come back in job order; a job
+        """Each job is (expr, x, y), (expr, x, y, p0) or (expr, x, y, p0, weights). Results come back in job order; a job
         that cannot run gets status "error" instead of stopping the batch. Each job's budget
         starts when a thread picks it up. Repeated expressions are compiled once."""
         variables = list(variables)
         raw, errors = [], {}
         for i, (expr, x, y, *rest) in enumerate(jobs):
             try:
-                raw.append(
-                    (expr, variables, *_args(variables, x, y, None, rest[0] if rest else None))
-                )
+                p0, w = (*rest, None, None)[:2]
+                raw.append((expr, variables, *_args(variables, x, y, w, p0)))
             except ValueError as e:
                 errors[i] = str(e)
                 raw.append((expr, variables, [], b"", None, None))  # placeholder, replaced below
