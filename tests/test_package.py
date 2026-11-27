@@ -119,3 +119,63 @@ def test_atan2_matches_numpy():
     x = np.linspace(-3, 3, 41)
     m = sf.compile("atan2(a*x - 1, b)")
     np.testing.assert_allclose(m.predict(x, [1.2, -0.5]), np.arctan2(1.2 * x - 1, -0.5), rtol=1e-15)
+
+
+def _exp_problem():
+    x = np.linspace(0, 5, 60)
+    return x, 2.0 * np.exp(-0.7 * x) + 0.3
+
+
+def test_trace_is_opt_in_and_starts_at_the_start():
+    x, y = _exp_problem()
+    m = sf.compile("a*exp(-b*x) + c")
+    assert m.fit(x, y, p0=[1, 1, 0]).trace is None
+    r = m.fit(x, y, p0=[1, 1, 0], trace=True)
+    assert r.trace.shape == (r.steps + 1, 3)
+    # step 0 is the start in names order; the linear parameters (a, c) are already solved at it
+    assert r.trace[0][1] == 1.0
+    full_p0 = sf.compile("exp(-b*x)*sin(c*x)").fit(x, y, p0=[0.5, 2.0], trace=True, max_steps=0)
+    np.testing.assert_array_equal(full_p0.trace, [[0.5, 2.0]])  # no linear parameters: exactly p0
+    np.testing.assert_allclose(r.trace[-1], r.params)  # accepted updates only improve the loss
+
+
+def test_max_steps_caps_accepted_updates_and_is_a_trace_prefix():
+    x, y = _exp_problem()
+    m = sf.compile("a*exp(-b*x) + c")
+    full = m.fit(x, y, p0=[1, 1, 0], trace=True)
+    assert full.steps > 3
+    for k in (0, 1, 3):
+        r = m.fit(x, y, p0=[1, 1, 0], trace=True, max_steps=k)
+        assert (r.status, r.steps, len(r.trace)) == ("max_steps", k, k + 1)
+        np.testing.assert_array_equal(r.trace, full.trace[: k + 1])
+        np.testing.assert_array_equal(r.params, r.trace[-1])
+    # a cap beyond convergence changes nothing
+    r = m.fit(x, y, p0=[1, 1, 0], trace=True, max_steps=10_000)
+    assert r.status == full.status and r.steps == full.steps
+
+
+def test_trace_follows_names_order_on_the_fallback_and_linear_paths():
+    x, y = _exp_problem()
+    lin = sf.compile("a*x + c").fit(x, 3 * x + 1, trace=True)  # fully linear: one solve
+    assert lin.status == "converged" and lin.trace.shape == (1, 2)
+    full = sf.compile("exp(-b*x)*sin(c*x)").fit(x, y, p0=[0.5, 2.0], trace=True, max_steps=2)
+    assert full.trace.shape[1] == 2 and full.steps <= 2
+
+
+def test_deadline_keeps_the_trace_so_far():
+    x, y = _exp_problem()
+    r = sf.compile("a*exp(-b*x) + c").fit(x, y, p0=[1, 1, 0], budget_ms=0.0, trace=True)
+    assert r.status == "deadline" and r.trace.shape[1] == 3
+    assert len(r.trace) in (0, r.steps + 1)  # nothing evaluated, or the steps taken so far
+
+
+def test_fit_many_trace_matches_fit():
+    x, y = _exp_problem()
+    m = sf.compile("a*exp(-b*x) + c")
+    jobs = [(m, x, y, [1, 1, 0]), (m, x, y * 2, [1, 1, 0])]
+    pooled = sf.Pool(threads=2).fit_many(jobs, progress=False, trace=True, max_steps=4)
+    for (_, xx, yy, p0), got in zip(jobs, pooled, strict=True):
+        want = m.fit(xx, yy, p0=p0, trace=True, max_steps=4)
+        assert got.status == want.status == "max_steps" and got.steps == 4
+        np.testing.assert_array_equal(got.trace, want.trace)
+    assert sf.Pool(threads=1).fit_many(jobs, progress=False)[0].trace is None

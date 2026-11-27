@@ -5,6 +5,14 @@ not listed here.
 
 ## Unreleased
 
+- `Model.fit` and `Pool.fit_many` take `trace=True` and `max_steps=`. With `trace`, `FitResult.trace`
+  holds the parameter vector (in `names` order) at step 0 (the start, with eliminated linear
+  parameters already solved at it) and after every accepted update, shape `(steps + 1, n_params)`; rejected trials and residual or Jacobian evaluations do
+  not count as steps. `max_steps=k` stops after `k` accepted updates with status `"max_steps"`;
+  a capped run is a prefix of the uncapped trace. A converged, stalled or deadline result keeps
+  the trace so far. `FitResult.steps` is the number of accepted updates. Both default to off,
+  and then nothing is recorded.
+
 ## 0.1.1 (2026-11-27)
 
 - `FitResult.history_ms` and `history_loss`: the best loss at the first evaluation and at each

@@ -44,7 +44,10 @@ pub fn fit(prob: &mut Problem, theta0: &[f64], tr: &mut Tracker) -> (Status, Pat
             // fully linear: the single projected solve is the exact answer
             let mut r = DVector::zeros(vp.m());
             return match vp.residual(&beta0, &mut r) {
-                Ok(sse) if sse.is_finite() => (Status::Converged, Path::Linear),
+                Ok(sse) if sse.is_finite() => {
+                    vp.tracker().accept_step(true);
+                    (Status::Converged, Path::Linear)
+                }
                 Ok(_) => (Status::Failure("non-finite linear solve".into()), Path::Linear),
                 Err(Stop::Deadline) => (Status::Deadline, Path::Linear),
             };

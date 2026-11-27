@@ -31,6 +31,8 @@ pub enum Status {
     Converged,
     Stalled,
     Deadline,
+    /// `max_steps` accepted updates were taken.
+    MaxSteps,
     Failure(String),
 }
 
@@ -40,6 +42,7 @@ impl Status {
             Status::Converged => "converged",
             Status::Stalled => "stalled",
             Status::Deadline => "deadline",
+            Status::MaxSteps => "max_steps",
             Status::Failure(_) => "failure",
         }
     }

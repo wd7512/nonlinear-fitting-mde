@@ -20,6 +20,10 @@ pub struct Data {
     pub y: Vec<f64>,
     pub w: Option<Vec<f64>>,
     pub p0: Option<Vec<f64>>,
+    /// Record θ after every accepted update (entry 0 is the start).
+    pub trace: bool,
+    /// Stop after this many accepted updates.
+    pub max_steps: Option<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -40,6 +44,9 @@ pub struct Outcome {
     /// The best loss each time it improved, and when (ms since the call).
     pub history_ms: Vec<f64>,
     pub history_loss: Vec<f64>,
+    /// Accepted updates completed, and (with `trace`) θ at step 0..=steps.
+    pub steps: usize,
+    pub trace: Option<Vec<Vec<f64>>>,
 }
 
 /// f(x; θ) at every data point.
@@ -74,6 +81,7 @@ pub fn fit_one(c: &Compiled, data: Data, budget_ms: f64) -> Result<Outcome, Stri
     let mut prob = Problem::new(c, &data.x, data.y, data.w)?;
     let setup_ms = t0.elapsed().as_secs_f64() * 1e3;
     let mut tr = Tracker::new(budget_ms - setup_ms, &[], prob.inv_scale);
+    tr.enable_trace(data.trace, data.max_steps);
     let status = match catch_unwind(AssertUnwindSafe(|| fit(&mut prob, &theta0, &mut tr).0)) {
         Ok(s) => s,
         Err(e) => {
@@ -96,6 +104,8 @@ pub fn fit_one(c: &Compiled, data: Data, budget_ms: f64) -> Result<Outcome, Stri
         time_ms: t0.elapsed().as_secs_f64() * 1e3,
         history_ms: tr.hist_t_ms.iter().map(|t| t + setup_ms).collect(),
         history_loss: tr.hist_loss,
+        steps: tr.steps,
+        trace: tr.trace,
     })
 }
 
@@ -159,6 +169,31 @@ mod tests {
         assert_eq!(o.history_loss.last(), Some(&o.loss));
         assert!(o.history_ms.windows(2).all(|w| w[0] <= w[1]));
         assert!(o.history_loss.windows(2).all(|w| w[0] > w[1]));
+    }
+
+    #[test]
+    fn trace_and_step_cap() {
+        let c = compile("a*exp(-b*x) + c", &["x".into()], None).unwrap();
+        let mut d = exp_data(2.0, 0.7, 0.3);
+        d.p0 = Some(vec![1.0, 1.0, 0.0]);
+        d.trace = true;
+        let full = fit_one(&c, d.clone(), 100.0).unwrap();
+        let t = full.trace.as_ref().unwrap();
+        assert_eq!(t.len(), full.steps + 1);
+        assert_eq!(t[0].len(), 3);
+        d.max_steps = Some(2);
+        let capped = fit_one(&c, d, 100.0).unwrap();
+        assert_eq!((capped.status, capped.steps), ("max_steps", 2));
+        assert_eq!(capped.trace.as_ref().unwrap(), &t[..3]);
+        // max_steps = 0 stops at the start
+        let mut d2 = exp_data(2.0, 0.7, 0.3);
+        d2.p0 = Some(vec![1.0, 1.0, 0.0]);
+        d2.trace = true;
+        d2.max_steps = Some(0);
+        let z = fit_one(&c, d2, 100.0).unwrap();
+        assert_eq!((z.status, z.steps, z.trace.as_ref().map(Vec::len)), ("max_steps", 0, Some(1)));
+        // tracing off: nothing recorded
+        assert!(fit_one(&c, exp_data(2.0, 0.7, 0.3), 100.0).unwrap().trace.is_none());
     }
 
     #[test]

@@ -25,6 +25,11 @@ pub struct Tracker {
     pub nfev: usize,
     pub fev_ns: u64,
     pub n_nonfinite: usize,
+    /// Opt-in: θ after each accepted update (the start is entry 0), and the accepted-update cap.
+    pub trace: Option<Vec<Vec<f64>>>,
+    pub max_steps: Option<usize>,
+    pub steps: usize,
+    pending: Vec<f64>,
 }
 
 impl Tracker {
@@ -45,7 +50,29 @@ impl Tracker {
             nfev: 0,
             fev_ns: 0,
             n_nonfinite: 0,
+            trace: None,
+            max_steps: None,
+            steps: 0,
+            pending: Vec::new(),
         }
+    }
+
+    /// Record θ at the start and after every accepted update; stop after `max_steps` updates.
+    pub fn enable_trace(&mut self, trace: bool, max_steps: Option<usize>) {
+        self.trace = trace.then(Vec::new);
+        self.max_steps = max_steps;
+    }
+
+    /// The last finite trial became the iterate. `initial` marks the start (step 0). Returns
+    /// true once `max_steps` accepted updates have been taken.
+    pub fn accept_step(&mut self, initial: bool) -> bool {
+        if let Some(t) = &mut self.trace {
+            t.push(self.pending.clone());
+        }
+        if !initial {
+            self.steps += 1;
+        }
+        self.max_steps.is_some_and(|m| self.steps >= m)
     }
 
     #[inline]
@@ -86,6 +113,10 @@ impl Tracker {
             return loss;
         }
         self.n_trials += 1;
+        if self.trace.is_some() {
+            self.pending.clear();
+            self.pending.extend_from_slice(theta);
+        }
         let t = self.elapsed_ns();
         while self.snapshots.len() < self.snap_ns.len() && t > self.snap_ns[self.snapshots.len()] {
             self.snapshots.push(self.best_theta.clone());
