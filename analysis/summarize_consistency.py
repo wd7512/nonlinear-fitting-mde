@@ -116,6 +116,8 @@ for a in arms:
         curve_vs_A_median=float(np.median(s['curve_vs_A'])) if 'curve_vs_A' in s else None,
         curve_vs_A_share_lt1=float(np.mean(s['curve_vs_A'] < 1)) if 'curve_vs_A' in s else None,
         p_vs_A_share_gt05=float(np.mean(s['p_vs_A'] > 0.5)) if 'p_vs_A' in s else None,
+        at_pmax=float(np.mean((np.clip(Pe[:, 8:10], P_MIN, P_MAX) >= P_MAX - 1e-6).any(1))),
+        wide=float(np.mean((np.clip(Pe[:, 4:8], 0.1, 2 * np.pi) >= np.pi).any(1))),
         **({'lam': float(R[a]['lam'])} if a == 'F' else {}),
     ))
     if SYNTH:      # recovery of the known exponents (peaks paired to the truth's)
@@ -143,6 +145,8 @@ if SYNTH:
                          ('rmse_minp', 'bias_minp', 'within05', 'rmse_minp_double', 'repro_err', 'truth_median_double',
                           'pop_median_all_double', 'truth_median_repro', 'pop_median_repro')})
 for r in rows:
+    print(r['arm'], f"exponent at its upper bound {r['at_pmax']:.0%}, a flank wider than pi {r['wide']:.0%}")
+for r in rows:
     print(r['arm'], 'dR2 CI', r['d_r2_ci'], 'pop median CI', r['pop_median_repro_ci'], 'curve<1 noise vs A', r['curve_vs_A_share_lt1'], r.get('lam', ''))
 json.dump(rows, open(f'{OUT}/summary.json', 'w'), indent=1)
 
@@ -150,26 +154,29 @@ json.dump(rows, open(f'{OUT}/summary.json', 'w'), indent=1)
 plt.rcParams.update({'font.size': 10, 'axes.spines.top': False, 'axes.spines.right': False,
                      'axes.edgecolor': '#666666', 'axes.labelcolor': '#191919', 'xtick.color': '#666666', 'ytick.color': '#666666'})
 fig = plt.figure(figsize=(15, 10), dpi=150)
-gs = fig.add_gridspec(2, 3, hspace=0.42, wspace=0.32)
+gs = fig.add_gridspec(2, 3, hspace=0.42, wspace=0.12)
 y = np.arange(len(arms))[::-1]
 
-def hbar(ax, vals, title, fmt='{:.0%}', ci=None):
-    for yi, a, v in zip(y, arms, vals):
+def hbar(ax, vals, title, fmt='{:.0%}', ci=None, labels=True):
+    for k, (yi, a, v) in enumerate(zip(y, arms, vals)):
         ax.barh(yi, v, color=COLOR[a], height=0.6)
-        ax.text(v, yi, ' ' + fmt.format(v), va='center', fontsize=9, color='#191919')
+        at = max(v, 0) if ci is None else max(ci[k][1], 0)
+        ax.text(at, yi, ' ' + fmt.format(v), va='center', fontsize=9, color='#191919')
     if ci is not None:
         for yi, c in zip(y, ci): ax.plot(c, [yi, yi], color='#191919', lw=1)
-    ax.set_yticks(y); ax.set_yticklabels([LABEL[a] for a in arms], fontsize=9)
+    ax.margins(x=0.18)
+    ax.set_yticks(y); ax.set_yticklabels([LABEL[a] for a in arms] if labels else [], fontsize=9)
     ax.set_title(title, fontsize=11, loc='left'); ax.grid(axis='x', color='#e5e5e5', lw=0.8); ax.set_axisbelow(True)
 
 hbar(fig.add_subplot(gs[0, 0]), [r['within_01'] for r in rows], 'Reaches the best known optimum\n(even-half MSE within 0.1%)')
-hbar(fig.add_subplot(gs[0, 1]), [r['icc'] for r in rows], 'Split-half agreement of min(p)\n(ICC, even vs odd fits, double-peaked cells)', '{:.2f}')
-hbar(fig.add_subplot(gs[0, 2]), [r['rr_share_range_gt_05'] for r in rows], 'Run-to-run inconsistency\n(cells whose min(p) moves > 0.5 on the same data)')
+hbar(fig.add_subplot(gs[0, 1]), [r['icc'] for r in rows], 'Split-half agreement of min(p)\n(ICC, even vs odd fits, double-peaked cells)', '{:.2f}', labels=False)
+hbar(fig.add_subplot(gs[0, 2]), [r['rr_share_range_gt_05'] for r in rows], 'Run-to-run inconsistency\n(cells whose min(p) moves > 0.5 on the same data)', labels=False)
 ax = fig.add_subplot(gs[1, 0])
 if 'A' in R:
     hbar(ax, [r['d_r2_vs_A'] for r in rows], 'Held-out R², paired median minus Adam\n(fit even, test odd; 95% CI)', '{:+.4f}', [r['d_r2_ci'] for r in rows])
+    ax.ticklabel_format(axis='x', style='sci', scilimits=(0, 0))
 ax = fig.add_subplot(gs[1, 1])
-hbar(ax, [r['secs_even'] for r in rows], 'CPU wall-clock, one 300-cell fit\n(4 threads; seconds, log scale)', '{:.0f} s'); ax.set_xscale('log')
+hbar(ax, [r['secs_even'] for r in rows], 'CPU wall-clock, one 300-cell fit\n(4 threads; seconds, log scale)', '{:.0f} s', labels=False); ax.set_xscale('log')
 ax = fig.add_subplot(gs[1, 2])
 for a in arms:
     s = S[a]; ax.scatter(s['mpe'][s['dbl']], s['mpo'][s['dbl']], s=8, alpha=0.5, color=COLOR[a], label=a, edgecolors='none') if a in ('A', 'E') else None
