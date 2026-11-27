@@ -6,12 +6,21 @@ import torch
 import symbfitrs
 
 UP = glob.glob('/root/.claude/uploads/*/')[0]
-_adam = json.load(open(UP + '9d73f0a9-jacob_tuning_fits.ipynb'))
-_will = json.load(open(UP + '06379ac6-jacob_tuning_will_fits.ipynb'))
-_src = lambda nb, i: ''.join(nb['cells'][i]['source'])
+# the two notebooks as uploaded (newest upload of each name wins); cells are found by content,
+# not by position, so an edit to a notebook does not silently shift what is executed
+_nb = lambda name: json.load(open(sorted(glob.glob(UP + f'*-{name}.ipynb'), key=lambda f: __import__('os').path.getmtime(f))[-1]))
+_adam, _will = _nb('jacob_tuning_fits'), _nb('jacob_tuning_will_fits')
+def cell(nb, needle):
+    hits = [''.join(c['source']) for c in nb['cells'] if c['cell_type'] == 'code' and needle in ''.join(c['source'])]
+    assert len(hits) == 1, f'{len(hits)} cells contain {needle!r}'
+    return hits[0]
 ns = {'np': np, 'torch': torch}
-exec(_src(_adam, 17), ns); exec(_src(_adam, 18), ns)
-_w = _src(_will, 22); exec(_w[_w.index('def _will_expression'):_w.index('def will_fit')], ns)
+exec(cell(_adam, 'def gen_gauss'), ns); exec(cell(_adam, 'def parameter_estimator_bz15'), ns)
+exec(cell(_adam, 'NUM_STEPS, LR').split('def mse')[0], ns)       # NUM_STEPS, LR, PATIENCE, SEED
+_w = cell(_will, 'def _will_expression'); exec(_w[_w.index('def _will_expression'):_w.index('def will_fit')], ns)
+_pen = cell(_will, 'def penalised_fit')
+exec(_pen[:_pen.index('def penalised_fit')], ns)                  # PENALTY, PENALTY_BUDGET_MS, PENALTY_SCALES
+PENALISED_FIT_SRC = _pen[_pen.index('def penalised_fit'):_pen.index('def fit(')]
 gen_gauss, estimator = ns['gen_gauss'], ns['parameter_estimator_bz15']
 P_MIN, P_MAX = ns['P_MIN'], ns['P_MAX']
 EXPR, NAMES = ns['_will_expression']('Gen. Gaussian')
