@@ -217,7 +217,7 @@ def evaluate(name, m):
         r2 = 1 - ((D['odd'] - fe) ** 2).sum(1) / ((D['odd'] - D['odd'].mean(1, keepdims=True)) ** 2).sum(1)
         hold = ((fh[:, HOLD] - D['even'][:, HOLD]) ** 2).mean(1)
         mpe = np.clip(P['even'][:, 8:10], 0.1, None).min(1)
-        o = dict(r2=np.median(r2), hold=hold, df=np.median(NB * (mse_te - mse_tr) / (2 * SIGMA2[d])),
+        o = dict(r2=np.median(r2), r2_all=r2, hold=hold, df=np.median(NB * (mse_te - mse_tr) / (2 * SIGMA2[d])),
                  icc=icc(mpe, paired_minp(P['even'], P['odd'])), rr=np.mean(np.abs(paired_minp(P['even'], P['rr']) - mpe) > 0.5),
                  at_p=p_at_max(m, P['even']), **info)
         if d == 'synth':
@@ -240,18 +240,22 @@ if __name__ == '__main__':
     if 'estimator only' not in names: names = ['estimator only'] + names       # the held-out-angle reference
     R = {n: evaluate(n, METHODS[n]) for n in names}
     ref = R['estimator only']
+    base = R.get('E: bounds+8 starts', ref)          # paired R2 differences are against this
+    for d in DATA:
+        for n in names: R[n][d]['dr2'] = np.mean(R[n][d]['r2_all'] - base[d]['r2_all'])
     print(f'\n{N_SUB} neurons; held-out angles = {len(HOLD)} of {NB} bins; symbfitrs: {MS_PER_START:.0f} ms per start')
     print('REAL DATA')
-    print(f'{"method":22s}{"testR2":>7s}{"heldout":>8s}{"df_eff":>7s}{"ICC":>6s}{"rr>.5":>6s}{"p@max":>6s}{"conv":>6s}{"secs":>6s}')
+    print('dR2 = mean paired test-R2 difference against "E: bounds+8 starts" (medians of 60 cells are too noisy)')
+    print(f'{"method":22s}{"dR2":>7s}{"heldout":>8s}{"df_eff":>7s}{"ICC":>6s}{"rr>.5":>6s}{"p@max":>6s}{"conv":>6s}{"secs":>6s}')
     for n in names:
         o = R[n]['real']
-        print(f'{n:22s}{o["r2"]:7.3f}{np.median(o["hold"] / ref["real"]["hold"]):8.3f}{o["df"]:7.1f}{o["icc"]:6.2f}'
+        print(f'{n:22s}{o["dr2"]:+7.3f}{np.median(o["hold"] / ref["real"]["hold"]):8.3f}{o["df"]:7.1f}{o["icc"]:6.2f}'
               f'{o["rr"]:6.0%}{o["at_p"]:6.0%}{o.get("conv", np.nan):6.0%}{R[n]["secs"]:6.0f}')
     print('SYNTHETIC (known truth; curve err in noise-SE units, lower = less noise fitted)')
-    print(f'{"method":22s}{"testR2":>7s}{"heldout":>8s}{"df_eff":>7s}{"curve":>7s}{"RMSEp":>7s}{"bias":>6s}{"in.5":>6s}{"dblRMSE":>8s}{"strRMSE":>8s}{"str.5":>6s}{"rr>.5":>6s}{"p@max":>6s}')
+    print(f'{"method":22s}{"dR2":>7s}{"heldout":>8s}{"df_eff":>7s}{"curve":>7s}{"RMSEp":>7s}{"bias":>6s}{"in.5":>6s}{"dblRMSE":>8s}{"strRMSE":>8s}{"str.5":>6s}{"rr>.5":>6s}{"p@max":>6s}')
     for n in names:
         o = R[n]['synth']
-        print(f'{n:22s}{o["r2"]:7.3f}{np.median(o["hold"] / ref["synth"]["hold"]):8.3f}{o["df"]:7.1f}{o["curve"]:7.3f}'
+        print(f'{n:22s}{o["dr2"]:+7.3f}{np.median(o["hold"] / ref["synth"]["hold"]):8.3f}{o["df"]:7.1f}{o["curve"]:7.3f}'
               f'{o["rmse"]:7.2f}{o["bias"]:+6.2f}{o["within"]:6.0%}{o["rmse_dbl"]:8.2f}{o["rmse_strong"]:8.2f}{o["within_strong"]:6.0%}{o["rr"]:6.0%}{o["at_p"]:6.0%}')
     print(f'({DOUBLE.sum()} of {N_SUB} synthetic cells are clearly double-peaked)')
-    np.save(f'{OUT}/last_run.npy', {n: R[n] for n in names}, allow_pickle=True)
+    np.save(f'{OUT}/last_run.npy', {n: {d: {k: v for k, v in R[n][d].items() if k != 'r2_all'} if isinstance(R[n][d], dict) else R[n][d] for d in R[n]} for n in names}, allow_pickle=True)
