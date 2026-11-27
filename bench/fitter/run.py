@@ -31,6 +31,10 @@ CHUNK = 2000  # fits per fit_many call, so the wall-time cap is checked between 
 
 def ensure_binary() -> Path:
     """Build (or confirm up to date) the release binary; a no-op when nothing changed."""
+    import os
+
+    if override := os.environ.get("SYMBFITRS_BENCH_BIN"):  # prebuilt variant binary
+        return Path(override)
     subprocess.run(["cargo", "build", "--release", "--quiet"], cwd=RUST_DIR, check=True)
     return BINARY
 
@@ -68,7 +72,7 @@ def export_config(cfg, path: Path) -> dict:
     return info
 
 
-def _fit_record(pb: dict, model, start: str, theta0, loss0: float, r, theta_at) -> dict:
+def _fit_record(pb: dict, model, start: str, loss0: float, r, theta_at, solver: str) -> dict:
     denom = pb["denom"]
     small = len(model.params) <= MAX_THETA_P
     failed = r.status in ("failure", "error")
@@ -82,8 +86,8 @@ def _fit_record(pb: dict, model, start: str, theta0, loss0: float, r, theta_at) 
         "n_linear": len(model.linear),
         "loss0": loss0 if np.isfinite(loss0) else None,
         "start": start,
-        "solver": FITTER,
-        "solver_label": FITTER,
+        "solver": solver,
+        "solver_label": solver,
         "status": "failure" if failed else r.status,
         "error": r.message if failed else None,
         "elapsed_ms": r.time_ms,
@@ -107,7 +111,8 @@ def bench_package(
     threads: int = 1,
     seed: int = 42,
     max_wall_s: float = float("inf"),
-) -> None:
+    solver: str = FITTER,
+) -> list[dict]:
     """Fit every (problem, start) with ``symbfitrs.Pool(threads).fit_many``; records follow the
     Python harness schema. Each fit gets the largest budget; ``theta_at`` (parameters at each
     checkpoint, for problems with reference parameters) comes from refits at the smaller ones."""
@@ -159,7 +164,7 @@ def bench_package(
         return pool.fit_many(spec, budget_ms=budget, progress=False)
 
     meta = dict(doc["meta"])
-    meta["config"] = {**meta.get("config", {}), "solvers": [FITTER], "budgets_ms": list(budgets)}
+    meta["config"] = {**meta.get("config", {}), "solvers": [solver], "budgets_ms": list(budgets)}
     meta.update(
         type="meta",
         engine="symbfitrs (python package)",
@@ -198,8 +203,7 @@ def bench_package(
             pb, model = probs[i][:2]
             best = r.params.tolist() if r.history_loss.size else None
             theta_at = snaps[k] + [best] if k in snaps else None
-            out.append(_fit_record(pb, model, pb["starts"][s][0], pb["starts"][s][1],
-                                   loss0(i, s), r, theta_at))  # fmt: skip
+            out.append(_fit_record(pb, model, pb["starts"][s][0], loss0(i, s), r, theta_at, solver))
             done += 1
     out.append(
         {
@@ -210,8 +214,9 @@ def bench_package(
         }
     )
     records.write_text("".join(json.dumps(r) + "\n" for r in out))
-    print(f"{FITTER}: {done}/{len(jobs)} fits on {threads} thread(s) in "
+    print(f"{solver}: {done}/{len(jobs)} fits on {threads} thread(s) in "
           f"{time.perf_counter() - t_loop:.2f} s -> {records}")  # fmt: skip
+    return out
 
 
 def bench_varpro_rs(

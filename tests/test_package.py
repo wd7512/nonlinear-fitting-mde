@@ -119,3 +119,22 @@ def test_atan2_matches_numpy():
     x = np.linspace(-3, 3, 41)
     m = sf.compile("atan2(a*x - 1, b)")
     np.testing.assert_allclose(m.predict(x, [1.2, -0.5]), np.arctan2(1.2 * x - 1, -0.5), rtol=1e-15)
+
+
+def test_package_records_match_benchmark_schema(tmp_path):
+    """bench.fitter.run.bench_package turns FitResults into the records bench.scoring reads."""
+    from bench.fitter.export import export_problems
+    from bench.fitter.run import bench_package
+    from bench.models import SymbolicModel
+    from bench.problem import Problem
+
+    model = SymbolicModel("exp", "a*exp(-b*x) + c", ["a", "b", "c"], ["x"], X)
+    pb = Problem("p", "d", "m", "c", model, Y, {"s": np.ones(3)}, ref_mode="zero")
+    export_problems([pb], {"config": {}}, tmp_path / "problems.json")
+    recs = bench_package(tmp_path / "problems.json", tmp_path / "r.jsonl", [50], solver="sf_t2")
+    (rec,) = [r for r in recs if r["type"] == "fit"]
+    assert (rec["solver"], rec["problem"], rec["status"]) == ("sf_t2", "p", "converged")
+    assert rec["hist_loss"][-1] == pytest.approx(rec["best_loss"])
+    assert rec["hist_t_ms"] == sorted(rec["hist_t_ms"]) and len(rec["hist_t_ms"]) > 1
+    assert rec["loss0"] == pytest.approx(pb.loss_at(np.ones(3)))
+    assert rec["n_linear"] == 2
