@@ -26,6 +26,9 @@ fn columns(x: &[Vec<u8>]) -> PyResult<Vec<Vec<f64>>> {
 /// x columns, y, weights (float64 bytes) and p0.
 type RawData = (Vec<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, Option<Vec<f64>>);
 
+/// (model or expression, variables, x, y, w, p0) as passed from Python.
+type Job<'py> = (Bound<'py, PyAny>, Vec<String>, Vec<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, Option<Vec<f64>>);
+
 fn data((x, y, w, p0): RawData) -> PyResult<Data> {
     Ok(Data { x: columns(&x)?, y: f64s(&y)?, w: w.map(|w| f64s(&w)).transpose()?, p0 })
 }
@@ -92,7 +95,7 @@ fn compile(expr: &str, variables: Vec<String>, params: Option<Vec<String>>) -> P
 #[pyo3(signature = (jobs, budget_ms, threads, progress=None))]
 fn fit_many<'py>(
     py: Python<'py>,
-    jobs: Vec<(Bound<'py, PyAny>, Vec<String>, Vec<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, Option<Vec<f64>>)>,
+    jobs: Vec<Job<'py>>,
     budget_ms: f64,
     threads: usize,
     progress: Option<Py<PyAny>>,

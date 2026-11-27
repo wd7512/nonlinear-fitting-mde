@@ -180,8 +180,8 @@ impl Bound {
             buf: vec![0.0; total],
             m,
         };
-        for i in 0..n {
-            if !is_dyn[i] {
+        for (i, &dyn_i) in is_dyn.iter().enumerate() {
+            if !dyn_i {
                 match prog.ops[i] {
                     Op::Var(j) => {
                         let o = bound.off[i];
@@ -302,7 +302,7 @@ mod tests {
             outputs: vec![vec![6], vec![9], vec![0]],
         };
         let x = vec![0.0, 1.0, 2.0];
-        let mut b = Bound::new(&p, &[x.clone()], 3, 2).unwrap();
+        let mut b = Bound::new(&p, std::slice::from_ref(&x), 3, 2).unwrap();
         b.eval(&[2.0, 0.5]);
         let mut out = vec![0.0; 3];
         b.output_into(0, &mut out);
