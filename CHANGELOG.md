@@ -5,6 +5,8 @@ not listed here.
 
 ## Unreleased
 
+## 0.1.1 (2026-11-27)
+
 - `FitResult.history_ms` and `history_loss`: the best loss at the first evaluation and at each
   improvement, timed from the call like `time_ms`.
 - `FitResult.n_nonfinite`: evaluations that gave a non-finite loss.
