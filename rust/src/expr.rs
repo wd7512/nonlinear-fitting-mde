@@ -7,11 +7,14 @@
 //!
 //! Grammar: numbers, names, `+ - * / ^ **`, parentheses, unary minus, and the functions
 //! `exp log ln sqrt sin cos tan tanh sinh cosh atan arctan asin arcsin acos arccos abs sign
-//! erf erfc` and two-argument `max min pow`. `pi` is π. A name is a variable when listed as one
-//! and a parameter otherwise, in order of first appearance unless the order is given.
+//! erf erfc`, `wrap` (angle wrapped to (−π, π], derivative 1), `step` (1 where the argument is
+//! ≥ 0, else 0), and two-argument `max min pow atan2` and `expwerfc` (exp(a)·erfc(b) without
+//! overflow). `pi` is π. A name is a variable when listed as one and a parameter otherwise, in
+//! order of first appearance unless the order is given.
 
 use std::collections::HashMap;
 
+use crate::special::expwerfc;
 use crate::tape::{Op, Program};
 
 type Id = u32;
@@ -36,6 +39,7 @@ enum Un {
     Erf,
     Erfc,
     Step,
+    Wrap,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -47,6 +51,8 @@ enum Bin {
     Pow,
     Max,
     Min,
+    ExpWErfc,
+    Atan2,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -95,6 +101,7 @@ fn un_f(op: Un, x: f64) -> f64 {
                 f64::NAN
             }
         }
+        Un::Wrap => x.sin().atan2(x.cos()),
     }
 }
 
@@ -107,6 +114,8 @@ fn bin_f(op: Bin, a: f64, b: f64) -> f64 {
         Bin::Pow => a.powf(b),
         Bin::Max => a.max(b),
         Bin::Min => a.min(b),
+        Bin::ExpWErfc => expwerfc(a, b),
+        Bin::Atan2 => a.atan2(b),
     }
 }
 
@@ -293,6 +302,7 @@ impl Graph {
             }
             Un::Abs => self.un(Un::Sign, a),
             Un::Sign | Un::Step => self.c(0.0),
+            Un::Wrap => self.c(1.0),
             Un::Erf | Un::Erfc => {
                 let k = self.c(if op == Un::Erf { 1.0 } else { -1.0 } * 2.0 / std::f64::consts::PI.sqrt());
                 let a2 = self.powi(a, 2);
@@ -334,6 +344,31 @@ impl Graph {
                 };
                 let s = self.bin(Bin::Add, x, y);
                 self.bin(Bin::Mul, f, s)
+            }
+            Bin::Atan2 => {
+                // d atan2(a, b) = (b·da − a·db) / (a² + b²)
+                let bda = self.bin(Bin::Mul, b, da);
+                let adb = self.bin(Bin::Mul, a, db);
+                let num = self.bin(Bin::Sub, bda, adb);
+                let a2 = self.powi(a, 2);
+                let b2 = self.powi(b, 2);
+                let den = self.bin(Bin::Add, a2, b2);
+                self.bin(Bin::Div, num, den)
+            }
+            Bin::ExpWErfc => {
+                // ∂/∂a = f; ∂/∂b = −2/√π · exp(a − b²)
+                let x = self.bin(Bin::Mul, f, da);
+                let y = if self.konst(db) == Some(0.0) {
+                    self.c(0.0)
+                } else {
+                    let k = self.c(-2.0 / std::f64::consts::PI.sqrt());
+                    let b2 = self.powi(b, 2);
+                    let e = self.bin(Bin::Sub, a, b2);
+                    let e = self.un(Un::Exp, e);
+                    let ke = self.bin(Bin::Mul, k, e);
+                    self.bin(Bin::Mul, ke, db)
+                };
+                self.bin(Bin::Add, x, y)
             }
             Bin::Max | Bin::Min => {
                 // step(a - b) picks a for max; step(b - a) for min
@@ -442,6 +477,7 @@ impl Graph {
                         Un::Erf => Op::Erf(a),
                         Un::Erfc => Op::Erfc(a),
                         Un::Step => Op::Step(a),
+                        Un::Wrap => Op::Wrap(a),
                     }
                 }
                 Node::Bin(o, a, b) => {
@@ -454,6 +490,8 @@ impl Graph {
                         Bin::Pow => Op::PowF(a, b),
                         Bin::Max => Op::Max(a, b),
                         Bin::Min => Op::Min(a, b),
+                        Bin::ExpWErfc => Op::ExpWErfc(a, b),
+                        Bin::Atan2 => Op::Atan2(a, b),
                     }
                 }
             };
@@ -549,6 +587,16 @@ const FUNCS: &[(&str, Un)] = &[
     ("sign", Un::Sign),
     ("erf", Un::Erf),
     ("erfc", Un::Erfc),
+    ("wrap", Un::Wrap),
+    ("step", Un::Step),
+];
+
+const BIN_FUNCS: &[(&str, Bin)] = &[
+    ("max", Bin::Max),
+    ("min", Bin::Min),
+    ("pow", Bin::Pow),
+    ("atan2", Bin::Atan2),
+    ("expwerfc", Bin::ExpWErfc),
 ];
 
 impl Parser<'_> {
@@ -656,21 +704,21 @@ impl Parser<'_> {
                 if let Some(j) = self.vars.iter().position(|v| *v == name) {
                     return Ok(self.g.var(j as u32));
                 }
+                // a declared or already-seen parameter wins over `pi` and function names
+                if let Some(j) = self.params.iter().position(|p| *p == name) {
+                    return Ok(self.g.param(j as u32));
+                }
                 if name == "pi" {
                     return Ok(self.g.c(std::f64::consts::PI));
                 }
-                if FUNCS.iter().any(|(f, _)| *f == name) || ["max", "min", "pow"].contains(&name.as_str()) {
+                if FUNCS.iter().any(|(f, _)| *f == name) || BIN_FUNCS.iter().any(|(f, _)| *f == name) {
                     return Err(format!("{name} is a function: write {name}(...)"));
                 }
-                let j = match self.params.iter().position(|p| *p == name) {
-                    Some(j) => j,
-                    None if self.fixed_params => return Err(format!("unknown name {name:?}")),
-                    None => {
-                        self.params.push(name);
-                        self.params.len() - 1
-                    }
-                };
-                Ok(self.g.param(j as u32))
+                if self.fixed_params {
+                    return Err(format!("unknown name {name:?}"));
+                }
+                self.params.push(name);
+                Ok(self.g.param((self.params.len() - 1) as u32))
             }
             _ => Err(format!("expected a value, found {}", self.found())),
         }
@@ -683,13 +731,7 @@ impl Parser<'_> {
             args.push(self.sum()?);
         }
         self.expect(')')?;
-        let bin = match name {
-            "max" => Some(Bin::Max),
-            "min" => Some(Bin::Min),
-            "pow" => Some(Bin::Pow),
-            _ => None,
-        };
-        if let Some(op) = bin {
+        if let Some(&(_, op)) = BIN_FUNCS.iter().find(|(f, _)| *f == name) {
             return match args[..] {
                 [a, b] => Ok(self.g.bin(op, a, b)),
                 _ => Err(format!("{name} takes 2 arguments, got {}", args.len())),
@@ -834,6 +876,11 @@ mod tests {
         assert!(compile("a*", &vars(), None).is_err());
         assert!(compile("foo(x)*a", &vars(), None).is_err());
         assert!(compile("2*x", &vars(), None).is_err());
+        assert!(compile("wrap*x", &vars(), None).is_err());
+        let named = compile("pi*x", &vars(), Some(&["pi".to_string()])).unwrap();
+        assert_eq!(named.params, ["pi"]);
+        let v = eval(&named.f, &[2.0], &[3.0])[0][0];
+        assert_eq!(v, 6.0); // the declared parameter, not π
     }
 
     #[test]
@@ -843,6 +890,8 @@ mod tests {
             "a*tanh(b*x) + log(1 + c*x) + sqrt(d + x)",
             "erf(a*x) * erfc(b - x) + atan(c*x) * abs(d - x) + x^c",
             "exp(-((x - a)/b)^2) * cosh(c) + acos(d/(1 + d^2))",
+            "a*wrap(x - b) + step(x - c)*d + expwerfc(a*x, b - x)",
+            "atan2(a*x - 1, b + c*x^2) + atan2(d, a)",
         ];
         let x = [0.3, 0.7, 1.9];
         let th = [1.3, 0.7, 0.4, 0.9];

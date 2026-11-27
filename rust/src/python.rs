@@ -1,6 +1,7 @@
 //! Python bindings (`symbfitrs._core`). Arrays cross as native-endian float64 bytes, so the
 //! module needs only the stable ABI; `python/symbfitrs` wraps it in the public API.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,7 +9,7 @@ use std::time::Duration;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use crate::driver::{self, Data, Job, Outcome};
+use crate::driver::{self, Data, Outcome};
 use crate::expr::{self, Compiled};
 
 fn f64s(b: &[u8]) -> PyResult<Vec<f64>> {
@@ -18,24 +19,25 @@ fn f64s(b: &[u8]) -> PyResult<Vec<f64>> {
     }
 }
 
-/// x columns, y, weights (float64 bytes) and p0.
-type RawData = (Vec<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, Option<Vec<f64>>);
-/// (expr, variables, x columns, y, weights, p0)
-type RawJob = (String, Vec<String>, Vec<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, Option<Vec<f64>>);
-
-fn data((x, y, w, p0): RawData) -> PyResult<Data> {
-    Ok(Data {
-        x: x.iter().map(|c| f64s(c)).collect::<PyResult<_>>()?,
-        y: f64s(&y)?,
-        w: w.map(|w| f64s(&w)).transpose()?,
-        p0,
-    })
+fn columns(x: &[Vec<u8>]) -> PyResult<Vec<Vec<f64>>> {
+    x.iter().map(|c| f64s(c)).collect()
 }
 
-type PyOutcome = (Vec<String>, Vec<f64>, f64, &'static str, String, usize, f64, Vec<f64>, Vec<f64>);
+/// x columns, y, weights (float64 bytes) and p0.
+type RawData = (Vec<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, Option<Vec<f64>>);
+
+/// (model or expression, variables, x, y, w, p0) as passed from Python.
+type Job<'py> = (Bound<'py, PyAny>, Vec<String>, Vec<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, Option<Vec<f64>>);
+
+fn data((x, y, w, p0): RawData) -> PyResult<Data> {
+    Ok(Data { x: columns(&x)?, y: f64s(&y)?, w: w.map(|w| f64s(&w)).transpose()?, p0 })
+}
+
+/// (names, params, loss, status, message, nfev, n_nonfinite, time_ms, history_ms, history_loss)
+type PyOutcome = (Vec<String>, Vec<f64>, f64, &'static str, String, usize, usize, f64, Vec<f64>, Vec<f64>);
 
 fn out(o: Outcome) -> PyOutcome {
-    (o.names, o.params, o.loss, o.status, o.message, o.nfev, o.time_ms, o.hist_t_ms, o.hist_loss)
+    (o.names, o.params, o.loss, o.status, o.message, o.nfev, o.n_nonfinite, o.time_ms, o.history_ms, o.history_loss)
 }
 
 #[pyclass(frozen, module = "symbfitrs._core")]
@@ -58,7 +60,12 @@ impl Model {
         self.0.linear.clone()
     }
 
-    /// (names, params, loss, status, message, nfev, time_ms, hist_t_ms, hist_loss)
+    fn predict(&self, py: Python<'_>, x: Vec<Vec<u8>>, params: Vec<f64>) -> PyResult<Vec<f64>> {
+        let x = columns(&x)?;
+        let c = self.0.clone();
+        py.detach(move || driver::predict(&c, &x, &params)).map_err(PyValueError::new_err)
+    }
+
     #[pyo3(signature = (x, y, w, p0, budget_ms))]
     fn fit(
         &self,
@@ -81,27 +88,39 @@ fn compile(expr: &str, variables: Vec<String>, params: Option<Vec<String>>) -> P
     expr::compile(expr, &variables, params.as_deref()).map(|c| Model(Arc::new(c))).map_err(PyValueError::new_err)
 }
 
-/// Jobs are (expr, variables, x, y, w, p0); results in job order, each (outcome tuple, "") or
-/// (None, error). `progress(n)` is called with the number of newly finished jobs.
+/// Jobs are (model or expression, variables, x, y, w, p0); an expression is compiled once per
+/// batch over `variables`. Results come in job order, each (outcome tuple, "") or (None, error).
+/// `progress(n)` is called with the number of newly finished jobs.
 #[pyfunction]
 #[pyo3(signature = (jobs, budget_ms, threads, progress=None))]
-fn fit_many(
-    py: Python<'_>,
-    jobs: Vec<RawJob>,
+fn fit_many<'py>(
+    py: Python<'py>,
+    jobs: Vec<Job<'py>>,
     budget_ms: f64,
     threads: usize,
     progress: Option<Py<PyAny>>,
 ) -> PyResult<Vec<(Option<PyOutcome>, String)>> {
     let n = jobs.len();
-    let jobs = jobs
-        .into_iter()
-        .map(|(expr, variables, x, y, w, p0)| Ok(Job { expr, variables, data: data((x, y, w, p0))? }))
-        .collect::<PyResult<Vec<_>>>()?;
+    let mut compiled: HashMap<(String, Vec<String>), Result<Arc<Compiled>, String>> = HashMap::new();
+    let mut batch = Vec::with_capacity(n);
+    for (src, variables, x, y, w, p0) in jobs {
+        let model = match src.extract::<PyRef<Model>>() {
+            Ok(m) => Ok(m.0.clone()),
+            Err(_) => {
+                let e: String = src.extract()?;
+                compiled
+                    .entry((e, variables))
+                    .or_insert_with_key(|(e, v)| expr::compile(e, v, None).map(Arc::new))
+                    .clone()
+            }
+        };
+        batch.push((model, data((x, y, w, p0))?));
+    }
     let (done, cancel) = (AtomicUsize::new(0), AtomicBool::new(false));
     let mut interrupt: Option<PyErr> = None;
     let results = py.detach(|| {
         std::thread::scope(|s| {
-            let worker = s.spawn(|| driver::fit_many(jobs, budget_ms, threads, &done, &cancel));
+            let worker = s.spawn(|| driver::fit_many(batch, budget_ms, threads, &done, &cancel));
             let mut reported = 0;
             loop {
                 let finished = worker.is_finished();

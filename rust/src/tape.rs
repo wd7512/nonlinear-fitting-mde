@@ -1,18 +1,16 @@
 //! Vectorised expression tapes.
 //!
 //! A [`Program`] is a straight-line list of operations in SSA form (register `i` holds the
-//! result of op `i`; operands always refer to earlier registers), exported from SymPy after
-//! common-subexpression elimination. Registers are either scalars (no data dependence) or
-//! vectors of length `m` (one value per observation).
+//! result of op `i`; operands always refer to earlier registers), built by [`crate::expr`]
+//! from a hash-consed expression DAG, so common subexpressions appear once. Registers are
+//! either scalars (no data dependence) or vectors of length `m` (one value per observation).
 //!
 //! Binding a program to data ([`Bound`]) fixes widths and buffer offsets and evaluates every
 //! parameter-independent register once (data columns, `cos(k*pi*x)`, constants), so each
 //! evaluation only executes the parameter-dependent ops, over one contiguous buffer.
 //!
 //! Outputs are lists of registers: a single register (broadcast to `m` if scalar), or `m`
-//! scalar registers, one per row (residual-vector problems such as MGH).
-
-use serde_json::Value;
+//! scalar registers, one per row.
 
 use crate::special::expwerfc;
 
@@ -29,6 +27,7 @@ pub enum Op {
     Max(u32, u32),
     Min(u32, u32),
     ExpWErfc(u32, u32),
+    Atan2(u32, u32),
     PowI(u32, i32),
     Neg(u32),
     Sqrt(u32),
@@ -57,7 +56,7 @@ impl Op {
         match *self {
             Const(_) | Var(_) | Param(_) => (None, None),
             Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | PowF(a, b) | Max(a, b) | Min(a, b)
-            | ExpWErfc(a, b) => (Some(a), Some(b)),
+            | ExpWErfc(a, b) | Atan2(a, b) => (Some(a), Some(b)),
             PowI(a, _) | Neg(a) | Sqrt(a) | Exp(a) | Log(a) | Sin(a) | Cos(a) | Tan(a)
             | Tanh(a) | Sinh(a) | Cosh(a) | Atan(a) | Asin(a) | Acos(a) | Abs(a) | Sign(a)
             | Erf(a) | Erfc(a) | Wrap(a) | Step(a) => (Some(a), None),
@@ -69,80 +68,6 @@ impl Op {
 pub struct Program {
     pub ops: Vec<Op>,
     pub outputs: Vec<Vec<u32>>,
-}
-
-fn idx(v: &Value) -> Result<u32, String> {
-    v.as_u64().map(|x| x as u32).ok_or_else(|| format!("bad register {v}"))
-}
-
-impl Program {
-    pub fn from_json(v: &Value) -> Result<Program, String> {
-        let ops_v = v["ops"].as_array().ok_or("program.ops missing")?;
-        let mut ops = Vec::with_capacity(ops_v.len());
-        for (i, o) in ops_v.iter().enumerate() {
-            let a = o.as_array().ok_or("op must be an array")?;
-            let name = a[0].as_str().ok_or("op name")?;
-            let u = |k: usize| idx(&a[k]);
-            use Op::*;
-            let op = match name {
-                "const" => Const(a[1].as_f64().ok_or("const value")?),
-                "var" => Var(u(1)?),
-                "param" => Param(u(1)?),
-                "add" => Add(u(1)?, u(2)?),
-                "sub" => Sub(u(1)?, u(2)?),
-                "mul" => Mul(u(1)?, u(2)?),
-                "div" => Div(u(1)?, u(2)?),
-                "powf" => PowF(u(1)?, u(2)?),
-                "max" => Max(u(1)?, u(2)?),
-                "min" => Min(u(1)?, u(2)?),
-                "expwerfc" => ExpWErfc(u(1)?, u(2)?),
-                "powi" => PowI(u(1)?, a[2].as_i64().ok_or("powi exponent")? as i32),
-                "neg" => Neg(u(1)?),
-                "sqrt" => Sqrt(u(1)?),
-                "exp" => Exp(u(1)?),
-                "log" => Log(u(1)?),
-                "sin" => Sin(u(1)?),
-                "cos" => Cos(u(1)?),
-                "tan" => Tan(u(1)?),
-                "tanh" => Tanh(u(1)?),
-                "sinh" => Sinh(u(1)?),
-                "cosh" => Cosh(u(1)?),
-                "atan" => Atan(u(1)?),
-                "asin" => Asin(u(1)?),
-                "acos" => Acos(u(1)?),
-                "abs" => Abs(u(1)?),
-                "sign" => Sign(u(1)?),
-                "erf" => Erf(u(1)?),
-                "erfc" => Erfc(u(1)?),
-                "wrap" => Wrap(u(1)?),
-                "step" => Step(u(1)?),
-                other => return Err(format!("unknown op {other:?}")),
-            };
-            let (x, y) = op.args();
-            if x.is_some_and(|r| r as usize >= i) || y.is_some_and(|r| r as usize >= i) {
-                return Err(format!("op {i} refers to a later register"));
-            }
-            ops.push(op);
-        }
-        let outputs = v["outputs"]
-            .as_array()
-            .ok_or("program.outputs missing")?
-            .iter()
-            .map(|o| {
-                o.as_array()
-                    .ok_or_else(|| "output must be a list".to_string())?
-                    .iter()
-                    .map(idx)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        for o in outputs.iter().flatten() {
-            if *o as usize >= ops.len() {
-                return Err("output register out of range".into());
-            }
-        }
-        Ok(Program { ops, outputs })
-    }
 }
 
 /// A program bound to data: widths, offsets and pre-evaluated static registers.
@@ -255,8 +180,8 @@ impl Bound {
             buf: vec![0.0; total],
             m,
         };
-        for i in 0..n {
-            if !is_dyn[i] {
+        for (i, &dyn_i) in is_dyn.iter().enumerate() {
+            if !dyn_i {
                 match prog.ops[i] {
                     Op::Var(j) => {
                         let o = bound.off[i];
@@ -300,6 +225,7 @@ impl Bound {
             Max(a, b) => binary(buf, o, at(a), at(b), w, f64::max),
             Min(a, b) => binary(buf, o, at(a), at(b), w, f64::min),
             ExpWErfc(a, b) => binary(buf, o, at(a), at(b), w, expwerfc),
+            Atan2(a, b) => binary(buf, o, at(a), at(b), w, f64::atan2),
             PowI(a, n) => {
                 let a = at(a).0;
                 match n {
@@ -366,19 +292,17 @@ impl Bound {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn exp_decay_and_static_hoisting() {
         // f = b1 * exp(-b2 * x)
-        let p = Program::from_json(&json!({
-            "ops": [["param",0],["param",1],["var",0],["mul",1,2],["neg",3],["exp",4],["mul",0,5],
-                    ["const",2.0],["var",0],["mul",7,8]],
-            "outputs": [[6],[9],[0]]
-        }))
-        .unwrap();
+        use Op::*;
+        let p = Program {
+            ops: vec![Param(0), Param(1), Var(0), Mul(1, 2), Neg(3), Exp(4), Mul(0, 5), Const(2.0), Var(0), Mul(7, 8)],
+            outputs: vec![vec![6], vec![9], vec![0]],
+        };
         let x = vec![0.0, 1.0, 2.0];
-        let mut b = Bound::new(&p, &[x.clone()], 3, 2).unwrap();
+        let mut b = Bound::new(&p, std::slice::from_ref(&x), 3, 2).unwrap();
         b.eval(&[2.0, 0.5]);
         let mut out = vec![0.0; 3];
         b.output_into(0, &mut out);
