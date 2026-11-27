@@ -68,6 +68,7 @@ impl Model {
     }
 
     #[pyo3(signature = (x, y, w, p0, budget_ms, trace=false, max_steps=None))]
+    #[allow(clippy::too_many_arguments)] // the pyo3 signature mirrors `Model.fit`
     fn fit(
         &self,
         py: Python<'_>,
