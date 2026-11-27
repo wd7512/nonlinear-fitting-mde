@@ -1,7 +1,8 @@
 name: Wheels
 
-# Builds wheels on every PR that touches the package; publishes to PyPI on a v* tag
-# (trusted publishing: the "pypi" environment, no token).
+# Builds wheels on every PR that touches the package; on a v* tag, publishes to PyPI (trusted
+# publishing: the "pypi" environment, no token) and creates the GitHub release. See
+# docs/releasing.md.
 on:
   push:
     tags: ["v*"]
@@ -71,9 +72,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: tag matches the package version
-        run: test "${GITHUB_REF_NAME#v}" = "$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)"
+        run: test "${GITHUB_REF_NAME#v}" = "$(python3 .github/version.py)"
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: python3 .github/version.py --notes > notes.md
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
