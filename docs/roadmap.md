@@ -60,4 +60,6 @@ def scipy_trf(job):
 | 4 | benchmark calls the package; end-to-end and thread-count comparisons | all six suites run |
 | 5 | wheel builds and PyPI release | wheels build in CI; a `v*` tag publishes |
 
-The SymPy tape export and the `symbfitrs-bench` program stay until step 4 replaces them.
+The benchmark prints each model as an expression string and fits it through the local
+`symbfitrs` package (`bench/fitter/run.py`); `symbfitrs-bench` now runs only the `varpro` crate
+baseline, compiling the same strings with the same parser.

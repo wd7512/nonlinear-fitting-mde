@@ -3,7 +3,7 @@
 model = symbfitrs.compile("a*exp(-b*x) + c")
 result = model.fit(x, y, budget_ms=5)
 
-results = symbfitrs.Pool(threads=8).fit_many([(expr, x, y), ...], budget_ms=5)
+results = symbfitrs.Pool(threads=8).fit_many([(expr_or_model, x, y), ...], budget_ms=5)
 """
 
 from __future__ import annotations
@@ -36,10 +36,10 @@ class FitResult:
     message: str = ""
     nfev: int = 0
     time_ms: float = 0.0
-    # loss history: ms since the fit started and the loss at the first evaluation and at every
-    # improvement (the best-so-far loss is a step function through these points)
-    hist_t_ms: np.ndarray = field(default_factory=lambda: np.empty(0))
-    hist_loss: np.ndarray = field(default_factory=lambda: np.empty(0))
+    n_nonfinite: int = 0  # evaluations with a non-finite loss (skipped)
+    # each improvement of the best loss: when (ms since the call) and the new best
+    history_ms: np.ndarray = field(default_factory=lambda: np.array([]))
+    history_loss: np.ndarray = field(default_factory=lambda: np.array([]))
 
     @property
     def success(self) -> bool:
@@ -84,11 +84,19 @@ def _args(variables, x, y, weights, p0):
 
 
 def _result(raw) -> FitResult:
-    names, params, loss, status, message, nfev, time_ms, hist_t, hist_loss = raw
+    names, params, loss, status, message, nfev, n_nonfinite, time_ms, hist_ms, hist_loss = raw
     return FitResult(
-        tuple(names), np.array(params), loss, status, message, nfev, time_ms,
-        np.array(hist_t), np.array(hist_loss),
-    )  # fmt: skip
+        tuple(names),
+        np.array(params),
+        loss,
+        status,
+        message,
+        nfev,
+        time_ms,
+        n_nonfinite,
+        np.array(hist_ms),
+        np.array(hist_loss),
+    )
 
 
 class Model:
@@ -111,6 +119,13 @@ class Model:
         """Parameters solved exactly at every step (the model is jointly linear in them)."""
         return [self.params[i] for i in self._core.linear]
 
+    def predict(self, x, params) -> np.ndarray:
+        """f(x; params) at every data point."""
+        cols = _columns(x, self.variables)
+        m = np.asarray(cols[0]).size if cols else 1
+        xs = [_bytes(c, m, f"x[{v!r}]") for v, c in zip(self.variables, cols, strict=True)]
+        return np.array(self._core.predict(xs, [float(v) for v in params]))
+
     def fit(self, x, y, *, p0=None, weights=None, budget_ms: float = 5.0) -> FitResult:
         """Minimise Σ (w (f(x; θ) − y))² from `p0` (default: all ones) within `budget_ms`."""
         raw = self._core.fit(*_args(self.variables, x, y, weights, p0), float(budget_ms))
@@ -125,13 +140,14 @@ def compile(  # noqa: A001 (the natural name for the API)
 ) -> Model:
     """Parse `expr`. Names in `variables` are data; every other name is a parameter, in order
     of first appearance unless `params` gives the order. Supports + - * / ^ (or **), exp, log,
-    sqrt, sin, cos, tan, sinh, cosh, tanh, asin, acos, atan, abs, sign, erf, erfc, max, min, pow
-    and pi. Raises ValueError on a malformed expression."""
+    sqrt, sin, cos, tan, sinh, cosh, tanh, asin, acos, atan, atan2, abs, sign, erf, erfc, max,
+    min, pow, wrap (angle to (−π, π]), step (1 for x ≥ 0), expwerfc(a, b) = exp(a)·erfc(b) and
+    pi. Raises ValueError on a malformed expression."""
     return Model(_core.compile(expr, list(variables), None if params is None else list(params)))
 
 
 class Pool:
-    """Fits many (expression, data) jobs on `threads` threads (default: all cores)."""
+    """Fits many (model, data) jobs on `threads` threads (default: all cores)."""
 
     def __init__(self, threads: int | None = None) -> None:
         self.threads = threads or os.cpu_count() or 1
@@ -144,18 +160,23 @@ class Pool:
         budget_ms: float = 5.0,
         progress: bool = True,
     ) -> list[FitResult]:
-        """Each job is (expr, x, y), (expr, x, y, p0) or (expr, x, y, p0, weights). Results come back in job order; a job
-        that cannot run gets status "error" instead of stopping the batch. Each job's budget
-        starts when a thread picks it up. Repeated expressions are compiled once."""
+        """Each job is (model, x, y), (model, x, y, p0) or (model, x, y, p0, weights), where
+        model is a compiled Model or an expression over `variables`. Results come back in job
+        order; a job that cannot run gets status "error" instead of stopping the batch. Each
+        job's budget starts when a thread picks it up. Repeated expressions are compiled once."""
         variables = list(variables)
         raw, errors = [], {}
-        for i, (expr, x, y, *rest) in enumerate(jobs):
+        for i, (model, x, y, *rest) in enumerate(jobs):
+            p0, weights = (*rest, None, None)[:2]
             try:
-                p0, w = (*rest, None, None)[:2]
-                raw.append((expr, variables, *_args(variables, x, y, w, p0)))
+                if isinstance(model, Model):
+                    src, names = model._core, model.variables
+                else:
+                    src, names = model, variables
+                raw.append((src, names, *_args(names, x, y, weights, p0)))
             except ValueError as e:
                 errors[i] = str(e)
-                raw.append((expr, variables, [], b"", None, None))  # placeholder, replaced below
+                raw.append(("", variables, [], b"", None, None))  # placeholder, replaced below
         bar = None
         if progress:
             from tqdm.auto import tqdm

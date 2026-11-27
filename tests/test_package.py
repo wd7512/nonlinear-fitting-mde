@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from scipy.special import erfc
 
 import symbfitrs as sf
 from bench.suites import nist
@@ -83,21 +84,38 @@ def test_nist_certified_rss_from_both_starts():
             assert rss == pytest.approx(nb.certified_rss, rel=1e-6, abs=1e-20), (nb.name, start)
 
 
-def test_thread_record_matches_benchmark_schema():
-    """bench.fitter.package_run turns a FitResult into the record bench.scoring reads."""
-    from bench.fitter.package_run import expression, record
-    from bench.models import SymbolicModel
-    from bench.problem import Problem
+def test_predict_and_history():
+    m = sf.compile("a*exp(-b*x) + c")
+    np.testing.assert_allclose(m.predict(X, [2.0, 0.7, 0.3]), Y, rtol=1e-15)
+    with pytest.raises(ValueError):
+        m.predict(X, [1.0, 2.0])
+    r = m.fit(X, Y, budget_ms=50)
+    assert r.history_loss.size > 0 and r.history_loss[-1] == r.loss
+    assert np.all(np.diff(r.history_loss) < 0) and np.all(np.diff(r.history_ms) >= 0)
+    assert r.history_ms[-1] <= r.time_ms and r.n_nonfinite == 0
 
-    model = SymbolicModel("exp", "a*exp(-b*x) + c", ["a", "b", "c"], ["x"], X)
-    e, variables, params = expression(model)
-    r = sf.compile(e, variables, params).fit(X, Y, p0=[1, 1, 0], budget_ms=50)
-    pb = Problem("p", "d", "m", "c", model, Y, {"s": np.ones(3)}, ref_mode="zero")
-    rec = record(pb, "s", [1, 1, 0], r, "symbfitrs_t2", 1.0)
-    assert (rec["solver"], rec["problem"], rec["status"]) == ("symbfitrs_t2", "p", "converged")
-    # the package reports mean squared residual; the record divides by the problem's denominator
-    assert rec["best_loss"] == pytest.approx(r.loss / pb.denom)
-    assert rec["hist_loss"][-1] == pytest.approx(rec["best_loss"])
-    assert rec["hist_t_ms"] == sorted(rec["hist_t_ms"]) and len(rec["hist_t_ms"]) > 1
-    assert rec["loss0"] == pytest.approx(pb.loss_at(np.array([1.0, 1.0, 0.0])))
-    assert rec["theta_at"] is None and rec["n_linear"] == 2
+
+def test_wrap_step_expwerfc_and_declared_pi():
+    x = np.linspace(-6, 6, 80)
+    m = sf.compile("a*wrap(x - b) + c*step(x - 1) + expwerfc(d*x, 2 - x)")
+    np.testing.assert_allclose(
+        m.predict(x, [1.5, 0.5, 2.0, 0.3]),
+        1.5 * np.angle(np.exp(1j * (x - 0.5))) + 2.0 * (x >= 1) + np.exp(0.3 * x) * erfc(2 - x),
+        rtol=1e-13,
+    )
+    assert sf.compile("pi*x", params=["pi"]).predict(X, [2.0])[1] == 2.0 * X[1]
+
+
+def test_fit_many_takes_models_with_their_own_variables_and_weights():
+    m = sf.compile("a*u + b", variables=["u"])
+    w = np.r_[np.ones(59), 0.0]
+    jobs = [(m, X, np.r_[3 * X[:-1] + 1, 99.0], None, w), ("a*exp(-b*x) + c", X, Y)]
+    out = sf.Pool(threads=2).fit_many(jobs, budget_ms=50, progress=False)
+    np.testing.assert_allclose(out[0].params, [3.0, 1.0], rtol=1e-10)
+    np.testing.assert_allclose(out[1].params, [2.0, 0.7, 0.3], rtol=1e-8)
+
+
+def test_atan2_matches_numpy():
+    x = np.linspace(-3, 3, 41)
+    m = sf.compile("atan2(a*x - 1, b)")
+    np.testing.assert_allclose(m.predict(x, [1.2, -0.5]), np.arctan2(1.2 * x - 1, -0.5), rtol=1e-15)
