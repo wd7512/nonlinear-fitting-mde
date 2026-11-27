@@ -112,7 +112,7 @@ def step2(Lf):
     report('shared prior fitted on the odd half only', *posterior(Lf['even'], g1, g2, FINE))
 
 
-def profile_cells(cells, Y, starts, ms, sd=None):
+def profile_cells(cells, Y, starts, ms, sd=None, keep=None):
     """Profile log-likelihood (len(cells), g, g) as in profile_eb.profile, with chosen effort."""
     import symbfitrs
     V = P.V; rng = np.random.default_rng(0); P0 = X.to_variant(X.EST(Y), V)
@@ -127,6 +127,8 @@ def profile_cells(cells, Y, starts, ms, sd=None):
             # weighted: loss is the mean of (r / sd)^2 per bin, so the log-likelihood is -n loss / 2
             out[:, a, b] = [-X.NB * r.loss / (2 * X.SIGMA2['synth'][i]) if sd is None else -X.NB * r.loss / 2
                             for i, r in zip(cells, res)]
+            if keep is not None:
+                keep[:, a, b] = [r.params for r in res]          # in the model's parameter order
     return out
 
 
@@ -173,6 +175,148 @@ def step6():
     print(f'  split-half ICC of the posterior mean {X.icc(mean_e, mean_o):.2f}; |diff| > 0.5 in {np.mean(np.abs(mean_e - mean_o) > 0.5):.0%}')
 
 
+def laplace(params, sd, eps=1e-6):
+    """-1/2 log det(J'J) of the nuisance parameters (all but p1, p2) at each profile point, J the
+    weighted Jacobian by central differences of Model.predict. params: (cells, g, g, n_params)."""
+    m = P.V['model']; names = m.params
+    nuis = [k for k, n in enumerate(names) if n not in ('p1', 'p2')]
+    out = np.empty(params.shape[:3])
+    for i in range(params.shape[0]):
+        x = X.TH[i]
+        for a in range(params.shape[1]):
+            for b in range(params.shape[2]):
+                th = params[i, a, b]; J = np.empty((len(x), len(nuis)))
+                for c, k in enumerate(nuis):
+                    h = eps * max(1.0, abs(th[k])); tp, tm = th.copy(), th.copy(); tp[k] += h; tm[k] -= h
+                    J[:, c] = (m.predict(x, tp) - m.predict(x, tm)) / (2 * h) / sd[i]
+                sign, logdet = np.linalg.slogdet(J.T @ J + 1e-10 * np.eye(len(nuis)))
+                out[i, a, b] = -0.5 * logdet
+    return out
+
+
+def step7():
+    print('--- step 7: Laplace correction for the profiled-out nuisance parameters (weighted, log-normal prior)')
+    import time; t0 = time.time(); cells = np.arange(X.N_SUB); n = len(P.V['model'].params)
+    L, C = {}, {}
+    for h in ('even', 'odd'):
+        par = np.empty((X.N_SUB, len(P.GRID), len(P.GRID), n))
+        L[h] = profile_cells(cells, X.DATA['synth'][h], 3, 30.0, sd=X._sd_syn, keep=par)
+        C[h] = laplace(par, X._sd_syn)
+    print(f'  {time.time() - t0:.0f}s; correction range per cell (median): {np.median(np.ptp(C["even"].reshape(X.N_SUB, -1), 1)):.1f} log units')
+    np.save('analysis/explore/profile_laplace.npy', {'L': L, 'C': C})
+    for name, Lx in (('weighted profile', L), ('weighted profile + Laplace', {h: L[h] + C[h] for h in L})):
+        Lf = {h: refine(Lx[h]) for h in Lx}
+        g, mu, sd = lognormal_prior(np.concatenate([Lf['even'], Lf['odd']]))
+        me, q = posterior(Lf['even'], g, g, FINE); mo, _ = posterior(Lf['odd'], g, g, FINE)
+        report(f'{name}', me, q)
+        print(f'    prior median p {np.exp(mu):.2f}; split-half ICC {X.icc(me, mo):.2f}')
+
+
+def continuation(Y, sd, par, L0, ms=30.0):
+    """Second pass: refit every grid point from the optima of its 8 neighbours (p set to this
+    point's values); keep the better of the two passes. par: (cells, g, g, n) model order."""
+    import symbfitrs
+    V = P.V; names = V['model'].params; k1, k2 = names.index('p1'), names.index('p2')
+    pool = symbfitrs.Pool(threads=4); g = len(P.GRID); L = L0.copy(); par = par.copy()
+    for a, pa in enumerate(P.GRID):
+        for b, pb in enumerate(P.GRID):
+            nb = [(a + da, b + db) for da in (-1, 0, 1) for db in (-1, 0, 1) if (da or db) and 0 <= a + da < g and 0 <= b + db < g]
+            jobs = []
+            for i in range(X.N_SUB):
+                S = np.array([par[i, u, v] for u, v in nb]); S[:, k1], S[:, k2] = pa, pb
+                jobs.append((V['model'], X.TH[i], Y[i], S, 1 / sd[i]))
+            res = pool.fit_many(jobs, budget_ms=ms * len(nb), bounds=dict(V['bounds'], p1=(pa, pa), p2=(pb, pb)), progress=False)
+            for i, r in enumerate(res):
+                if -X.NB * r.loss / 2 > L[i, a, b]:
+                    L[i, a, b] = -X.NB * r.loss / 2; par[i, a, b] = r.params
+    return L, par
+
+
+def step8():
+    print('--- step 8: profile continuation (refit each grid point from its neighbours) (weighted, log-normal prior)')
+    import time; t0 = time.time(); n = len(P.V['model'].params); L, L2 = {}, {}
+    for h in ('even', 'odd'):
+        par = np.empty((X.N_SUB, len(P.GRID), len(P.GRID), n))
+        L[h] = profile_cells(np.arange(X.N_SUB), X.DATA['synth'][h], 3, 30.0, sd=X._sd_syn, keep=par)
+        L2[h], _ = continuation(X.DATA['synth'][h], X._sd_syn, par, L[h])
+        d = L2[h] - L[h]
+        print(f'  {h}: points improved by > 0.5 log units {np.mean(d > 0.5):.1%}, max {d.max():.1f}', flush=True)
+    print(f'  {time.time() - t0:.0f}s')
+    np.save('analysis/explore/profile_continued.npy', L2)
+    for name, Lx in (('one pass', L), ('with continuation', L2)):
+        Lf = {h: refine(Lx[h]) for h in Lx}
+        g, mu, sd = lognormal_prior(np.concatenate([Lf['even'], Lf['odd']]))
+        me, q = posterior(Lf['even'], g, g, FINE); mo, _ = posterior(Lf['odd'], g, g, FINE)
+        report(name, me, q); print(f'    prior median p {np.exp(mu):.2f}; split-half ICC {X.icc(me, mo):.2f}')
+
+
+import consistency as C
+
+
+def real_sd(rows, half):
+    """Per-bin SE of the half's mean curve from a per-cell mean-variance line var = c0 + c1 mean
+    fitted to the trial variances (4 trials per bin are too few for a raw per-bin SD)."""
+    k = 0 if half == 'even' else 1
+    out = []
+    for i in rows:
+        t = C.CELLS[i][1][k]; mu, var = t.mean(1), t.var(1, ddof=1)
+        A = np.stack([np.ones_like(mu), mu], 1); c, *_ = np.linalg.lstsq(A, var, rcond=None)
+        v = np.clip(A @ c, 0.1 * var.mean(), None)
+        out.append(np.sqrt(v / t.shape[1]))
+    return np.array(out)
+
+
+def profile_rows(rows, half, sd, starts=3, ms=30.0):
+    import symbfitrs
+    V = P.V; rng = np.random.default_rng(0); Y = C.HALF[half][rows]
+    P0 = X.to_variant(np.array([C.estimator(C.TH[i], C.HALF[half][i]) for i in rows]), V)
+    pool = symbfitrs.Pool(threads=4); out = np.empty((len(rows), len(P.GRID), len(P.GRID)))
+    for a, pa in enumerate(P.GRID):
+        for b, pb in enumerate(P.GRID):
+            jobs = []
+            for j, i in enumerate(rows):
+                S = X.starts(P0[j], rng, dict(V, starts=starts)); S[:, 8], S[:, 9] = pa, pb
+                jobs.append((V['model'], C.TH[i], Y[j], S[:, V['order']], 1 / sd[j]))
+            res = pool.fit_many(jobs, budget_ms=ms * starts, bounds=dict(V['bounds'], p1=(pa, pa), p2=(pb, pb)), progress=False)
+            out[:, a, b] = [-C.TH.shape[1] * r.loss / 2 for r in res]
+    return out
+
+
+def step9(rows=None, tag='sub60'):
+    rows = X.SUB if rows is None else rows
+    print(f'--- step 9: real data, {len(rows)} neurons: weighted profile (mean-variance noise model) + log-normal prior')
+    import time; t0 = time.time(); L = {}
+    for h in ('even', 'odd'):
+        sd = real_sd(rows, h); L[h] = profile_rows(rows, h, sd)
+        # noise-model check: best-fit weighted MSE should be about 1 if the variances are right
+        print(f'  {h}: median best weighted MSE {np.median(-2 * L[h].reshape(len(rows), -1).max(1) / C.TH.shape[1]):.2f} (1 = noise model right)', flush=True)
+    print(f'  {time.time() - t0:.0f}s')
+    np.save(f'analysis/explore/profile_real_{tag}.npy', {'rows': rows, **L})
+    # the mean-variance line overestimates the noise (best weighted MSE ~0.62 where ~0.95 is
+    # expected), so rescale each cell's noise to its own residuals (a no-op when it is right)
+    n = C.TH.shape[1]
+    L = {h: L[h] / (-2 * L[h].reshape(len(rows), -1).max(1) / n * n / (n - 10))[:, None, None] for h in L}
+    Lf = {h: refine(L[h]) for h in L}
+    g, mu, sdp = lognormal_prior(np.concatenate([Lf['even'], Lf['odd']]))
+    me, q = posterior(Lf['even'], g, g, FINE); mo, qo = posterior(Lf['odd'], g, g, FINE)
+    w95 = q[0.95][1] - q[0.95][0]
+    print(f'  population: log p ~ N({mu:.2f}, {sdp:.2f}^2) -> median p {np.exp(mu):.2f}, '
+          f'central 80% of neurons {np.exp(mu - 1.28 * sdp):.2f}-{np.exp(mu + 1.28 * sdp):.2f}')
+    print(f'  per cell: median 95% width {np.median(w95):.2f}; narrower than 1.0 in {np.mean(w95 < 1):.0%}; '
+          f'split-half ICC {X.icc(me, mo):.2f}; |diff| > 0.5 in {np.mean(np.abs(me - mo) > 0.5):.0%}')
+    # do the halves' 95% intervals overlap (a consistency check that needs no truth)?
+    lo_e, hi_e = q[0.95]; lo_o, hi_o = qo[0.95]
+    print(f'  even and odd 95% intervals overlap in {np.mean((lo_e <= hi_o) & (lo_o <= hi_e)):.0%} of neurons')
+    # the notebook's population: double-peaked cells (estimator amplitude ratio >= 0.1 in both halves)
+    A = {h: np.array([C.estimator(C.TH[i], C.HALF[h][i])[2:4] for i in rows]).clip(min=0) for h in ('even', 'odd')}
+    dbl = np.all([A[h].min(1) / np.maximum(A[h].max(1), 1e-12) >= 0.1 for h in A], 0)
+    pm = (me + mo) / 2
+    boot = [np.median(pm[dbl][np.random.default_rng(b).integers(0, dbl.sum(), dbl.sum())]) for b in range(2000)]
+    print(f'  double-peaked cells: {dbl.sum()} of {len(rows)}; median posterior min p {np.median(pm[dbl]):.2f} '
+          f'(95% CI {np.percentile(boot, 2.5):.2f}-{np.percentile(boot, 97.5):.2f})')
+    return dict(mu=mu, sd=sdp, me=me, mo=mo)
+
+
 if __name__ == '__main__':
     steps = sys.argv[1:] or ['1', '2']
     Lf = step1() if '1' in steps or '2' in steps else None
@@ -180,3 +324,7 @@ if __name__ == '__main__':
     if '3' in steps: step3()
     if '4' in steps: step4()
     if '6' in steps: step6()
+    if '7' in steps: step7()
+    if '8' in steps: step8()
+    if '9' in steps: step9()
+    if '300' in steps: step9(np.arange(C.N), 'all300')
