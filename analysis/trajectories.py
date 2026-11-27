@@ -57,6 +57,7 @@ for s in range(STEPS):
     adam_loss[s] = lc.detach().numpy(); adam_dead[s] = ((Pa.detach()[:, 1:] < lo_t - 1e-12) | (Pa.detach()[:, 1:] > hi_t + 1e-12)).sum(1).numpy()
     Pa.grad.nan_to_num_(0, 0, 0); opt.step()
 with torch.no_grad(): adam_loss[STEPS] = ((gen_gauss(th32, Pa).squeeze(0) - y32) ** 2).mean(1).numpy()
+with torch.no_grad(): adam_dead[STEPS] = ((Pa[:, 1:] < lo_t - 1e-12) | (Pa[:, 1:] > hi_t + 1e-12)).sum(1).numpy()   # the entry after the last update
 adam_secs = time.time() - t; print(f'Adam {adam_secs:.0f} s for {STEPS} steps x {N} neurons', flush=True)
 
 # aggregate curves on common grids
@@ -72,9 +73,10 @@ agg['Adam (batched; time amortised per neuron)'] = dict(steps=adam_loss[sgrid].T
 amort = adam_secs / STEPS / N * 1e3                                          # ms per step per neuron
 agg['Adam (batched; time amortised per neuron)']['time'] = np.array([[adam_loss[min(int(t / amort), STEPS), i] for t in tgrid] for i in range(N)])
 idx = np.where(ab)[0]
+fix = lambda x: np.pad(np.asarray(x, float)[:6000], (0, max(0, 6000 - len(x))), constant_values=np.nan)   # first 6000 steps, padded
 np.savez_compressed(OUT, sgrid=sgrid, tgrid=tgrid, best=best, ab=ab, labels=list(agg), steps=np.array([agg[k]['steps'] for k in agg], dtype=np.float32),
          time=np.array([agg[k]['time'] for k in agg], dtype=np.float32), adam_amortised_ms_per_step=amort, rows=ROWS, gap_idx=idx,
          adam_loss_gap=adam_loss[:, idx], adam_dead_gap=adam_dead[:, idx],
-         **{f'loss::{k}': np.array([np.pad(v[i][0], (0, 6000 - len(v[i][0])), constant_values=np.nan)[:6000] for i in idx], dtype=np.float32) for k, v in rec.items()},
-         **{f'dead::{k}': np.array([np.pad(v[i][1].astype(float), (0, 6000 - len(v[i][1])), constant_values=np.nan)[:6000] for i in idx], dtype=np.float32) for k, v in rec.items()})
+         **{f'loss::{k}': np.array([fix(v[i][0]) for i in idx], dtype=np.float32) for k, v in rec.items()},
+         **{f'dead::{k}': np.array([fix(v[i][1]) for i in idx], dtype=np.float32) for k, v in rec.items()})
 print('saved', OUT)
