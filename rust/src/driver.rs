@@ -35,6 +35,10 @@ pub struct Outcome {
     pub message: String,
     pub nfev: usize,
     pub time_ms: f64,
+    /// Loss history: time (ms from the start of the fit) and loss at the first evaluation and at
+    /// every strict improvement.
+    pub hist_t_ms: Vec<f64>,
+    pub hist_loss: Vec<f64>,
 }
 
 /// Fit `c` to `data` within `budget_ms`, timed from the call.
@@ -67,6 +71,8 @@ pub fn fit_one(c: &Compiled, data: Data, budget_ms: f64) -> Result<Outcome, Stri
         message,
         nfev: tr.nfev,
         time_ms: t0.elapsed().as_secs_f64() * 1e3,
+        hist_t_ms: std::mem::take(&mut tr.hist_t_ms),
+        hist_loss: std::mem::take(&mut tr.hist_loss),
     })
 }
 
