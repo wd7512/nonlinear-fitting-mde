@@ -1,7 +1,7 @@
 """The package version, from rust/Cargo.toml (pyproject.toml reads it from there).
 
-  python .github/version.py            print it; exit 1 if rust/Cargo.lock disagrees
-  python .github/version.py --notes    print its CHANGELOG.md section; exit 1 if there is none
+python .github/version.py            print it; exit 1 if rust/Cargo.lock disagrees
+python .github/version.py --notes    print its CHANGELOG.md section; exit 1 if there is none
 """
 
 import re
