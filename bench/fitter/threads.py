@@ -107,6 +107,7 @@ def shuffled(n: int, seed: int) -> list[int]:
 
 
 def run_suite(suite: str, threads: list[int], out: Path, budget_ms: float | None = None) -> dict:
+    walls: dict[int, float] = {}
     import symbfitrs
 
     from ..config import CONFIG_DIR
@@ -158,6 +159,7 @@ def run_suite(suite: str, threads: list[int], out: Path, budget_ms: float | None
                                                budget_ms=deadline, progress=False), strict=True):  # fmt: skip
                 results[i] = r
         wall = (time.perf_counter() - t0) * 1e3
+        walls[n] = wall / 1e3
         print(f"  {n} thread(s): {wall / 1e3:.1f} s")
         for (pb, start, theta0, *_), r in zip(jobs, results, strict=True):
             records.append(record(pb, start, theta0, r, SOLVER.format(n=n), wall / len(jobs)))
@@ -167,6 +169,7 @@ def run_suite(suite: str, threads: list[int], out: Path, budget_ms: float | None
         "engine": "symbfitrs package",
         "config": {**cfg.model_dump(mode="json"), "solvers": [SOLVER.format(n=n) for n in threads]},
         "threads": threads,
+        "wall_s": walls,
         "deadline_ms": deadline,
         "n_jobs": len(records),
         "n_problems": len(problems) - len(skipped),
@@ -186,10 +189,12 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("suites", nargs="*", default=SUITES)
     ap.add_argument("--threads", type=int, nargs="+", default=[1, 2, 3, 4])
+    ap.add_argument("--budget-ms", type=float, help="per-fit budget (default: the suite's)")
+    ap.add_argument("--kind", default="threads", help="results/<suite>_<kind>")
     ap.add_argument("--results", type=Path, default=Path("results"))
     a = ap.parse_args(argv)
     for s in a.suites:
-        run_suite(s, a.threads, a.results / f"{s}_threads")
+        run_suite(s, a.threads, a.results / f"{s}_{a.kind}", a.budget_ms)
 
 
 if __name__ == "__main__":
