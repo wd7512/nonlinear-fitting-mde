@@ -154,7 +154,15 @@ json.dump(rows, open(f'{OUT}/summary.json', 'w'), indent=1)
 plt.rcParams.update({'font.size': 10, 'axes.spines.top': False, 'axes.spines.right': False,
                      'axes.edgecolor': '#666666', 'axes.labelcolor': '#191919', 'xtick.color': '#666666', 'ytick.color': '#666666'})
 fig = plt.figure(figsize=(15, 10), dpi=150)
-gs = fig.add_gridspec(2, 3, hspace=0.42, wspace=0.12)
+gs = fig.add_gridspec(2, 3, hspace=0.62, wspace=0.12)
+import textwrap
+
+
+def caption(ax, text, y=-0.13):
+    """A short note under a panel: which direction is better, and why."""
+    ax.text(0, y, textwrap.fill(text, 62), transform=ax.transAxes, ha='left', va='top', fontsize=9,
+            color='#666666', style='italic')
+
 y = np.arange(len(arms))[::-1]
 
 def hbar(ax, vals, title, fmt='{:.0%}', ci=None, labels=True):
@@ -168,21 +176,30 @@ def hbar(ax, vals, title, fmt='{:.0%}', ci=None, labels=True):
     ax.set_yticks(y); ax.set_yticklabels([LABEL[a] for a in arms] if labels else [], fontsize=9)
     ax.set_title(title, fontsize=11, loc='left'); ax.grid(axis='x', color='#e5e5e5', lw=0.8); ax.set_axisbelow(True)
 
-hbar(fig.add_subplot(gs[0, 0]), [r['within_01'] for r in rows], 'Reaches the best known optimum\n(even-half MSE within 0.1%)')
-hbar(fig.add_subplot(gs[0, 1]), [r['icc'] for r in rows], 'Split-half agreement of min(p)\n(ICC, even vs odd fits, double-peaked cells)', '{:.2f}', labels=False)
-hbar(fig.add_subplot(gs[0, 2]), [r['rr_share_range_gt_05'] for r in rows], 'Run-to-run inconsistency\n(cells whose min(p) moves > 0.5 on the same data)', labels=False)
+ax = fig.add_subplot(gs[0, 0])
+hbar(ax, [r['within_01'] for r in rows], 'Reaches the best known optimum\n(even-half MSE within 0.1%)')
+caption(ax, 'Higher is better: the fit really minimises the loss it reports, so the answer does not depend on where the optimiser happened to stop.')
+ax = fig.add_subplot(gs[0, 1])
+hbar(ax, [r['icc'] for r in rows], 'Split-half agreement of min(p)\n(ICC, even vs odd fits, double-peaked cells)', '{:.2f}', labels=False)
+caption(ax, 'Higher is better: two independent halves of the same neuron should give the same exponent. High agreement can also come from pulling both fits toward the same start, so read it with the panel on the left.')
+ax = fig.add_subplot(gs[0, 2])
+hbar(ax, [r['rr_share_range_gt_05'] for r in rows], 'Run-to-run inconsistency\n(cells whose min(p) moves > 0.5 on the same data)', labels=False)
+caption(ax, 'Lower is better: refitting the same data after an arbitrary change (a nudged start, another validation split, other random restarts) should not change the answer.')
 ax = fig.add_subplot(gs[1, 0])
 if 'A' in R:
     hbar(ax, [r['d_r2_vs_A'] for r in rows], 'Held-out R², paired median minus Adam\n(fit even, test odd; 95% CI)', '{:+.4f}', [r['d_r2_ci'] for r in rows])
     ax.ticklabel_format(axis='x', style='sci', scilimits=(0, 0))
+    caption(ax, 'Higher is better, but every difference here is below 0.001 in R²: all methods predict held-out data equally well, so accuracy cannot separate them.', y=-0.17)
 ax = fig.add_subplot(gs[1, 1])
 hbar(ax, [r['secs_even'] for r in rows], 'CPU wall-clock, one 300-cell fit\n(4 threads; seconds, log scale)', '{:.0f} s', labels=False); ax.set_xscale('log')
+caption(ax, 'Lower is better: the time to fit 300 neurons once on a 4-core CPU. Bootstraps and repeat fits multiply it.')
 ax = fig.add_subplot(gs[1, 2])
 for a in arms:
     s = S[a]; ax.scatter(s['mpe'][s['dbl']], s['mpo'][s['dbl']], s=8, alpha=0.5, color=COLOR[a], label=a, edgecolors='none') if a in ('A', 'E') else None
 ax.plot([0, 4], [0, 4], color='#666666', lw=1, ls='--'); ax.set_xlim(0, 4.1); ax.set_ylim(0, 4.1)
 ax.set_xlabel('min(p), even-half fit'); ax.set_ylabel('min(p), odd-half fit'); ax.legend(title='arm', frameon=False, fontsize=9)
 ax.set_title('Split-half min(p): Adam (A) vs bounds + starts (E)', fontsize=11, loc='left')
+caption(ax, 'Closer to the dashed diagonal is better: a point on it gets the same min(p) from both halves of the data.', y=-0.2)
 fig.suptitle(('SYNTHETIC (known p): ' if SYNTH else '') + 'Same 300 Stringer-2019 neurons, same halves: accuracy, optimum quality and self-consistency', fontsize=13, x=0.01, ha='left')
 fig.savefig(f'{PNG}.png', bbox_inches='tight')
 
