@@ -9,7 +9,7 @@ Controls: 'none' (unbounded, clamp at the end), 'project_each' (project after ev
 'active_set' (hold a parameter at a bound only while the gradient pushes outward; MPFIT-style).
 usage: PYTHONPATH=. python analysis/alternating_projection.py OUT.npz [N_QUICK]
 """
-import sys, time
+import os, sys, time
 import numpy as np
 import torch
 import symbfitrs
@@ -39,7 +39,8 @@ def score(P):
         return ((pr - y64) ** 2).mean(1).numpy(), (1 - ((te64 - pr) ** 2).sum(1) / ((te64 - te64.mean(1, keepdim=True)) ** 2).sum(1)).numpy()
 
 EPS = 1e-12
-def lm(th, y, x0, scheme, max_iter=300, tau=1e-3):
+MAXIT = int(os.environ.get('MAXIT', 300))
+def lm(th, y, x0, scheme, max_iter=MAXIT, tau=1e-3):
     p = len(x0); clip = lambda v: np.clip(v, LO, HI)
     res = lambda v: FREE.predict(th, v) - y
     x = clip(x0); r = res(x); sse = float(r @ r); nfev = 1
@@ -93,7 +94,7 @@ def lm(th, y, x0, scheme, max_iter=300, tau=1e-3):
     out = clip(best_x) if scheme != 'none' else clip(x)
     return out, its, nfev, small >= 2
 
-schemes = ['none', 'project_each', 'alternate', 'alternate_literal', 'alternate4', 'active_set']
+schemes = os.environ.get('SCHEMES', 'none,project_each,alternate,alternate_literal,alternate4,active_set').split(',')
 labels = {'none': 'LM on unclipped model, clamp at the end', 'project_each': 'project into the box after every step',
           'alternate': 'ALTERNATE (your idea): full step, project, step on non-pinned, release', 'alternate_literal': 'alternate, literal (accept the unbounded step on its own loss)',
           'alternate4': 'alternate, release only every 4th step', 'active_set': 'gradient-based active set (MPFIT-style)'}
