@@ -25,7 +25,8 @@ __version__ = version("symbfitrs")
 class FitResult:
     """Best parameters found and how the fit ended.
 
-    `status` is "converged", "stalled" (no further progress), "deadline" (budget spent; `params`
+    `status` is "converged", "stalled" (no further progress), "max_steps" (`max_steps` accepted
+    updates taken), "deadline" (budget spent; `params`
     is the best so far), "failure" or "error" (the job could not run; see `message`).
     """
 
@@ -40,6 +41,11 @@ class FitResult:
     # each improvement of the best loss: when (ms since the call) and the new best
     history_ms: np.ndarray = field(default_factory=lambda: np.array([]))
     history_loss: np.ndarray = field(default_factory=lambda: np.array([]))
+    # accepted optimizer updates completed; with `trace=True`, the full parameter vector (in
+    # `names` order) at step 0 and after each accepted update: (steps + 1, n_params). Step 0 is
+    # the start; linear parameters that the solver eliminates are already solved exactly at it.
+    steps: int = 0
+    trace: np.ndarray | None = None
 
     @property
     def success(self) -> bool:
@@ -84,7 +90,20 @@ def _args(variables, x, y, weights, p0):
 
 
 def _result(raw) -> FitResult:
-    names, params, loss, status, message, nfev, n_nonfinite, time_ms, hist_ms, hist_loss = raw
+    (
+        names,
+        params,
+        loss,
+        status,
+        message,
+        nfev,
+        n_nonfinite,
+        time_ms,
+        hist_ms,
+        hist_loss,
+        steps,
+        trace,
+    ) = raw
     return FitResult(
         tuple(names),
         np.array(params),
@@ -96,6 +115,8 @@ def _result(raw) -> FitResult:
         n_nonfinite,
         np.array(hist_ms),
         np.array(hist_loss),
+        steps,
+        None if trace is None else np.array(trace, dtype=float).reshape(-1, len(names)),
     )
 
 
@@ -126,9 +147,24 @@ class Model:
         xs = [_bytes(c, m, f"x[{v!r}]") for v, c in zip(self.variables, cols, strict=True)]
         return np.array(self._core.predict(xs, [float(v) for v in params]))
 
-    def fit(self, x, y, *, p0=None, weights=None, budget_ms: float = 5.0) -> FitResult:
-        """Minimise Σ (w (f(x; θ) − y))² from `p0` (default: all ones) within `budget_ms`."""
-        raw = self._core.fit(*_args(self.variables, x, y, weights, p0), float(budget_ms))
+    def fit(
+        self,
+        x,
+        y,
+        *,
+        p0=None,
+        weights=None,
+        budget_ms: float = 5.0,
+        trace: bool = False,
+        max_steps: int | None = None,
+    ) -> FitResult:
+        """Minimise Σ (w (f(x; θ) − y))² from `p0` (default: all ones) within `budget_ms`.
+
+        `trace=True` also returns θ at step 0 (the start) and after every accepted update;
+        `max_steps` stops after that many accepted updates (status "max_steps")."""
+        raw = self._core.fit(
+            *_args(self.variables, x, y, weights, p0), float(budget_ms), trace, max_steps
+        )
         return _result(raw)
 
     def __repr__(self) -> str:
@@ -159,11 +195,14 @@ class Pool:
         variables: Sequence[str] = ("x",),
         budget_ms: float = 5.0,
         progress: bool = True,
+        trace: bool = False,
+        max_steps: int | None = None,
     ) -> list[FitResult]:
         """Each job is (model, x, y), (model, x, y, p0) or (model, x, y, p0, weights), where
         model is a compiled Model or an expression over `variables`. Results come back in job
         order; a job that cannot run gets status "error" instead of stopping the batch. Each
-        job's budget starts when a thread picks it up. Repeated expressions are compiled once."""
+        job's budget starts when a thread picks it up. Repeated expressions are compiled once.
+        `trace` and `max_steps` apply to every job, as in `Model.fit`."""
         variables = list(variables)
         raw, errors = [], {}
         for i, (model, x, y, *rest) in enumerate(jobs):
@@ -183,7 +222,9 @@ class Pool:
 
             bar = tqdm(total=len(raw), unit="fit")
         try:
-            out = _core.fit_many(raw, float(budget_ms), self.threads, bar.update if bar else None)
+            out = _core.fit_many(
+                raw, float(budget_ms), self.threads, bar.update if bar else None, trace, max_steps
+            )
         finally:
             if bar is not None:
                 bar.close()

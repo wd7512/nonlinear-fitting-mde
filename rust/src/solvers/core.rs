@@ -41,6 +41,9 @@ fn run<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
         return Ok(Status::Failure("non-finite initial residual".into()));
     }
     f.accept();
+    if f.tracker().accept_step(true) {
+        return Ok(Status::MaxSteps);
+    }
     let floor = o.loss_floor / f.tracker().inv_scale();
     let mut jac = DMatrix::zeros(m, n);
     let mut js = DMatrix::zeros(m, n);
@@ -113,8 +116,12 @@ fn run<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
         std::mem::swap(&mut r, &mut rt);
         sse = sse_t;
         f.accept();
+        let capped = f.tracker().accept_step(false);
         if small_f || small_x {
             return Ok(Status::Converged);
+        }
+        if capped {
+            return Ok(Status::MaxSteps);
         }
     }
 }
