@@ -1,112 +1,28 @@
-//! A fitting problem bound to its data, loaded from the JSON exported by `python -m bench run CONFIG --fitter`.
+//! A fitting problem: a compiled model bound to its data.
 //!
-//! residual r(θ) = w ⊙ (f(x; θ) − y); loss = Σ r² / (m · denom).
+//! residual r(θ) = w ⊙ (f(x; θ) − y); loss = Σ r² · inv_scale (1/m unless the caller rescales).
 //! For separable models f = Φ(β) α + c(β), the `sep` program outputs [c, Φ_0, …, Φ_{k-1}]
 //! (α set to zero), with α = θ[linear_idx], β = θ[nonlinear_idx].
 
 use nalgebra::DMatrix;
-use serde_json::Value;
 
 use crate::expr::Compiled;
-use crate::tape::{Bound, Program};
+use crate::tape::Bound;
 
 pub struct Problem {
-    pub pid: String,
     pub p: usize,
     pub m: usize,
     pub y_eff: Vec<f64>,
     pub w: Option<Vec<f64>>,
-    pub inv_scale: f64, // 1 / (m · denom)
+    pub inv_scale: f64,
     pub lin: Vec<usize>,
     pub nonlin: Vec<usize>,
     pub f: Bound,
     pub fj: Bound,
     pub sep: Option<Bound>,
-    pub starts: Vec<(String, Vec<f64>)>,
-    /// fields copied verbatim into every record (dataset, model, curve, reference, tags, ...)
-    pub record: Value,
-}
-
-fn f64s(v: &Value, what: &str) -> Result<Vec<f64>, String> {
-    v.as_array()
-        .ok_or_else(|| format!("{what} must be a list"))?
-        .iter()
-        .map(|x| x.as_f64().ok_or_else(|| format!("{what}: non-numeric entry")))
-        .collect()
-}
-
-fn usizes(v: &Value) -> Vec<usize> {
-    v.as_array()
-        .map(|a| a.iter().filter_map(|x| x.as_u64().map(|u| u as usize)).collect())
-        .unwrap_or_default()
 }
 
 impl Problem {
-    pub fn from_json(v: &Value, programs: &[Program]) -> Result<Problem, String> {
-        let pid = v["pid"].as_str().unwrap_or("?").to_string();
-        let err = |e: String| format!("{pid}: {e}");
-        let p = v["p"].as_u64().ok_or("p")? as usize;
-        let m = v["m"].as_u64().ok_or("m")? as usize;
-        let x: Vec<Vec<f64>> = v["x"]
-            .as_array()
-            .ok_or("x")?
-            .iter()
-            .map(|c| f64s(c, "x"))
-            .collect::<Result<_, _>>()
-            .map_err(err)?;
-        let y = f64s(&v["y"], "y").map_err(err)?;
-        let w = if v["w"].is_null() { None } else { Some(f64s(&v["w"], "w").map_err(err)?) };
-        let y_eff = match &w {
-            Some(w) => y.iter().zip(w).map(|(a, b)| a * b).collect(),
-            None => y.clone(),
-        };
-        let denom = v["denom"].as_f64().ok_or("denom")?;
-        let lin = usizes(&v["linear_idx"]);
-        let nonlin = (0..p).filter(|i| !lin.contains(i)).collect();
-        let prog = |key: &str| -> Result<Option<Bound>, String> {
-            match v[key].as_u64() {
-                None => Ok(None),
-                Some(i) => {
-                    let pr = programs.get(i as usize).ok_or("program id out of range")?;
-                    Bound::new(pr, &x, m, p).map(Some).map_err(|e| format!("{pid} {key}: {e}"))
-                }
-            }
-        };
-        let f = prog("prog_f")?.ok_or("prog_f missing")?;
-        let fj = prog("prog_fj")?.ok_or("prog_fj missing")?;
-        let sep = if lin.is_empty() { None } else { prog("prog_sep")? };
-        if fj.n_outputs() != p + 1 {
-            return Err(err(format!("fj has {} outputs, expected {}", fj.n_outputs(), p + 1)));
-        }
-        if let Some(s) = &sep {
-            if s.n_outputs() != lin.len() + 1 {
-                return Err(err("sep output count mismatch".into()));
-            }
-        }
-        let starts = v["starts"]
-            .as_array()
-            .ok_or("starts")?
-            .iter()
-            .map(|s| Ok((s[0].as_str().unwrap_or("?").to_string(), f64s(&s[1], "start")?)))
-            .collect::<Result<Vec<_>, String>>()
-            .map_err(err)?;
-        Ok(Problem {
-            pid,
-            p,
-            m,
-            y_eff,
-            w,
-            inv_scale: 1.0 / (m as f64 * denom),
-            lin,
-            nonlin,
-            f,
-            fj,
-            sep,
-            starts,
-            record: v["record"].clone(),
-        })
-    }
-
     /// Bind a compiled model to data: `x` holds one column per variable; loss = mean of r².
     pub fn new(c: &Compiled, x: &[Vec<f64>], y: Vec<f64>, w: Option<Vec<f64>>) -> Result<Problem, String> {
         let (m, p) = (y.len(), c.params.len());
@@ -128,7 +44,6 @@ impl Problem {
         };
         let lin = c.linear.clone();
         Ok(Problem {
-            pid: String::new(),
             p,
             m,
             y_eff,
@@ -139,8 +54,6 @@ impl Problem {
             f: Bound::new(&c.f, x, m, p)?,
             fj: Bound::new(&c.fj, x, m, p)?,
             sep: c.sep.as_ref().map(|s| Bound::new(s, x, m, p)).transpose()?,
-            starts: Vec::new(),
-            record: Value::Null,
         })
     }
 

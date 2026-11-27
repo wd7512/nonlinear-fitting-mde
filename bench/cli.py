@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> None:
             )  # fmt: skip
             sp.add_argument(
                 "--jobs", type=int, nargs="?", const=4, default=1,
-                help="parallel single-threaded workers (bare flag: 4); timings get noisier",
+                help="parallel workers (bare flag: 4; with --fitter, Pool threads); timings get noisier",
             )  # fmt: skip
     gp = sub.add_parser("gate")
     gp.add_argument("action", choices=["build", "run"])

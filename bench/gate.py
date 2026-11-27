@@ -12,8 +12,8 @@ Tiers (``data/gate/<tier>.json``, problems.json format):
   test   up to 150 test cases per suite; for accepting a change
   rank   every candidate equation on the SAGE-Fit curves and 100 Stringer cells, 10 and 100 ms
 
-``run`` runs the fitter on a tier: success per suite at each budget (main checkpoint 5 ms), or,
-on ``rank``, ranking quality. ``--baseline`` compares with the records of an earlier run.
+``run`` runs the fitter (the local ``symbfitrs`` package, one thread) on a tier: success per
+suite at each budget (main checkpoint 5 ms), or, on ``rank``, ranking quality. ``--baseline`` compares with the records of an earlier run.
 
 Acceptance, fixed before any experiment (test tier, ``rank`` tier, 3 repeats for timing):
   gain     mean-over-suites success at 5 ms up >= 1.0 pp, or median fit time down >= 10%
@@ -87,7 +87,6 @@ def _sample(cases: list[tuple[int, int]], groups: list[str], n: int, rng) -> lis
 def build(results: Path = Path("results"), out: Path = GATE_DIR, seed: int = 0) -> None:
     rng = np.random.default_rng(seed)
     tiers: dict[str, list] = {t: [] for t in [*TIERS, "rank"]}
-    programs: list[dict] = []
     for suite in SUITES:
         d = results / f"{suite}_rust"
         if not (d / "problems.json").exists():  # export only; no fitting needed for this
@@ -101,8 +100,6 @@ def build(results: Path = Path("results"), out: Path = GATE_DIR, seed: int = 0) 
         cfg = doc["meta"]["config"]
         merged = d / "records.jsonl"
         refs = _refs(merged) if merged.exists() else pd.Series(dtype=float)
-        base = len(programs)
-        programs += doc["programs"]
         side_cases: dict[str, tuple[list, list]] = {"dev": ([], []), "test": ([], [])}
         probs = doc["problems"]
         for i, pb in enumerate(probs):
@@ -123,9 +120,6 @@ def build(results: Path = Path("results"), out: Path = GATE_DIR, seed: int = 0) 
                 gate_target=cfg["targets"][0],
                 gate_floor=cfg.get("relative_floor", 1e-20),
             )
-            for k in ("prog_f", "prog_fj", "prog_sep"):
-                if pb.get(k) is not None:
-                    pb[k] += base
             cases, groups = side_cases[_side(group)]
             for s in range(len(pb["starts"])):
                 cases.append((i, s))
@@ -149,18 +143,12 @@ def build(results: Path = Path("results"), out: Path = GATE_DIR, seed: int = 0) 
             tiers["rank"] += [dict(pb) for pb in probs if pb["record"]["curve"] in keep]
     out.mkdir(parents=True, exist_ok=True)
     for tier, probs in tiers.items():
-        used = sorted({pb[k] for pb in probs for k in ("prog_f", "prog_fj", "prog_sep")
-                       if pb.get(k) is not None})  # fmt: skip
-        remap = {old: new for new, old in enumerate(used)}
-        for pb in probs:
-            for k in ("prog_f", "prog_fj", "prog_sep"):
-                if pb.get(k) is not None:
-                    pb[k] = remap[pb[k]]
         meta = {"experiment": f"gate_{tier}", "config": {"name": f"gate_{tier}"}}
-        doc = {"meta": meta, "programs": [programs[i] for i in used], "problems": probs}
+        doc = {"meta": meta, "problems": probs}
         (out / f"{tier}.json").write_text(json.dumps(doc, allow_nan=False))
         n_cases = sum(len(pb["starts"]) for pb in probs)
-        print(f"{tier:5s}: {n_cases} cases, {len(probs)} problems, {len(used)} tapes")
+        n_models = len({(pb["expr"], *pb["variables"]) for pb in probs})
+        print(f"{tier:5s}: {n_cases} cases, {len(probs)} problems, {n_models} models")
 
 
 RULE_COLS = ["ref_loss", "ref_mode", "gate_mode", "gate_target", "gate_floor"]
@@ -231,7 +219,7 @@ def rank_table(df: pd.DataFrame) -> str:
 
 
 def run(tier: str, baseline: Path | None = None, out: Path | None = None) -> None:
-    from .fitter.run import bench
+    from .fitter.run import bench_package
 
     problems = GATE_DIR / f"{tier}.json"
     if not problems.exists():
@@ -239,7 +227,7 @@ def run(tier: str, baseline: Path | None = None, out: Path | None = None) -> Non
     out = out or Path("results") / "gate" / f"{tier}_{time.strftime('%Y%m%d-%H%M%S')}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
     budgets = RANK_BUDGETS if tier == "rank" else BUDGETS
-    bench(problems, out, budgets)
+    bench_package(problems, out, budgets)
     df = score_gate(out, budgets)
     if baseline is not None:
         rules = df.groupby("problem")[RULE_COLS].first()

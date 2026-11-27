@@ -1,8 +1,14 @@
-"""Export ``Problem``s to the JSON read by ``symbfitrs-bench``.
+"""Export ``Problem``s as expression strings + data: the input of the package runner and of
+``symbfitrs-bench`` (the ``varpro`` crate baseline).
 
-Programs are shared between problems with the same symbolic model (e.g. 1,000 curves of
-one family) and compiled once. Problems whose model has no symbolic form (finite-difference
-Python candidates) are skipped and listed.
+Each model is printed from its SymPy form into the package's expression grammar. Problems whose
+model has no symbolic form (finite-difference Python candidates) are skipped and listed;
+expressions the parser rejects are skipped when they are compiled.
+
+Residual-vector problems (MGH: one expression per residual, no data) become a single
+expression through indicator columns: variable ``_r{i}`` is 1 on row i and 0 elsewhere, and
+f = Σ_i _r{i}·(row i), fitted to y = 0. Each evaluation then computes every residual on every
+row, so these problems are slightly pessimistic for symbfitrs.
 """
 
 from __future__ import annotations
@@ -14,46 +20,84 @@ from pathlib import Path
 
 import numpy as np
 import sympy as sp
+from sympy.printing.str import StrPrinter
 
 from ..config import MAX_THETA_P
 from ..models import SymbolicModel, VectorResidualModel
 from ..models.families import CoupledTanh, ExpMixture, SinMixture
 from ..problem import Problem
-from .tape import NotExportable, model_programs
 
 
-def _family_expr(model):
+class NotExportable(Exception):
+    pass
+
+
+class _Printer(StrPrinter):
+    """SymPy → the grammar of ``symbfitrs.compile`` (``rust/src/expr.rs``)."""
+
+    def _print_Float(self, e):
+        return repr(float(e))
+
+    def _print_Rational(self, e):
+        return f"({e.p}/{e.q})"
+
+    def _print_Exp1(self, e):
+        return "exp(1)"
+
+    def _print_Abs(self, e):
+        return f"abs({self._print(e.args[0])})"
+
+    def _minmax(self, name, args):
+        s = self._print(args[0])
+        for a in args[1:]:
+            s = f"{name}({s}, {self._print(a)})"
+        return s
+
+    def _print_Max(self, e):
+        return self._minmax("max", e.args)
+
+    def _print_Min(self, e):
+        return self._minmax("min", e.args)
+
+    def _print_Infinity(self, e):
+        raise NotExportable("non-finite constant")
+
+    _print_NegativeInfinity = _print_ComplexInfinity = _print_NaN = _print_Infinity
+
+    def _print_ImaginaryUnit(self, e):
+        raise NotExportable("complex constant")
+
+
+def to_expr(e: sp.Expr) -> str:
+    return _Printer().doprint(e)
+
+
+def _family_expr(model) -> sp.Expr:
     x = sp.Symbol("x", real=True)
     ps = [sp.Symbol(n, real=True) for n in model.param_names]
     if isinstance(model, CoupledTanh):
         p = model.p
-        e = sp.tanh(sum(ps[k] * sp.cos(k * sp.pi * x) for k in range(p)) / sp.sqrt(p))
-    else:
-        k = model.k
-        phi = sp.exp if isinstance(model, ExpMixture) else sp.sin
-        sgn = -1 if isinstance(model, ExpMixture) else 1
-        e = sum(ps[i] * phi(sgn * ps[k + i] * x) for i in range(k))
-        if model.offset:
-            e = e + ps[2 * k]
-    return [e], ps, [x], [np.ravel(model.x)]
+        return sp.tanh(sum(ps[k] * sp.cos(k * sp.pi * x) for k in range(p)) / sp.sqrt(p))
+    k = model.k
+    phi = sp.exp if isinstance(model, ExpMixture) else sp.sin
+    sgn = -1 if isinstance(model, ExpMixture) else 1
+    e = sum(ps[i] * phi(sgn * ps[k + i] * x) for i in range(k))
+    return e + ps[2 * k] if model.offset else e
 
 
-def symbolic_form(model):
-    """(rows, psyms, vsyms, data columns, cache key) or raise NotExportable."""
+def symbolic_form(model) -> tuple[str, list[str], list[str], list[np.ndarray]]:
+    """(expr, variables, params, data columns) or raise NotExportable."""
     if isinstance(model, SymbolicModel):
-        e = model.compiled.expr
-        by_name = {s.name: s for s in e.free_symbols}
-        ps = [by_name.get(n, sp.Symbol(n, real=True)) for n in model.param_names]
-        vs = [by_name.get(n, sp.Symbol(n, real=True)) for n in model.variables]
         cols = [model.x[:, j] for j in range(model.x.shape[1])]
-        key = ("sym", sp.srepr(e), tuple(model.param_names), tuple(model.variables))
-        return [e], ps, vs, cols, key
+        expr = to_expr(model.compiled.expr)
+        return expr, list(model.variables), list(model.param_names), cols
     if isinstance(model, VectorResidualModel):
-        key = ("res", model.name, model.p, tuple(sp.srepr(r) for r in model.residuals))
-        return list(model.residuals), model.psyms, [], [], key
+        m = len(model.residuals)
+        expr = " + ".join(f"_r{i}*({to_expr(r)})" for i, r in enumerate(model.residuals))
+        return expr, [f"_r{i}" for i in range(m)], [s.name for s in model.psyms], list(np.eye(m))
     if isinstance(model, ExpMixture | SinMixture | CoupledTanh):
-        rows, ps, vs, cols = _family_expr(model)
-        return rows, ps, vs, cols, ("fam", type(model).__name__, model.p)
+        expr = to_expr(_family_expr(model))
+        return expr, ["x"], list(model.param_names), [np.ravel(model.x)]
     raise NotExportable(f"{type(model).__name__} has no symbolic form")
 
 
@@ -70,34 +114,17 @@ def _list(a):
 
 def export_problems(problems: list[Problem], meta: dict, path: Path) -> dict:
     t0 = time.perf_counter()
-    programs: list[dict] = []
-    cache: dict = {}
-    out, skipped = [], {}
+    out, skipped, models = [], {}, set()
     for pb in problems:
-        model = pb.model
         try:
-            rows, ps, vs, cols, key = symbolic_form(model)
-            lin = [int(i) for i in model.linear_idx]
-            key = (*key, tuple(lin))
-            if key not in cache:
-                f, fj, sep = model_programs(rows, ps, vs, lin)
-                ids = []
-                for prog in (f, fj, sep):
-                    if prog is None:
-                        ids.append(None)
-                    else:
-                        programs.append(prog)
-                        ids.append(len(programs) - 1)
-                cache[key] = ids
-            ids = cache[key]
-            if ids[2] is None:
-                lin = []  # not separable after all: VarPro falls back to LM
+            expr, variables, names, cols = symbolic_form(pb.model)
         except NotExportable as exc:
             skipped[pb.pid] = str(exc)
             continue
         if not (np.all(np.isfinite(pb.y)) and all(np.all(np.isfinite(c)) for c in cols)):
             skipped[pb.pid] = "non-finite data"
             continue
+        models.add((expr, tuple(variables), tuple(names)))
         small = pb.p <= MAX_THETA_P
         record = {
             "dataset": pb.dataset,
@@ -112,16 +139,13 @@ def export_problems(problems: list[Problem], meta: dict, path: Path) -> dict:
         out.append(
             {
                 "pid": pb.pid,
-                "p": pb.p,
-                "m": pb.m,
+                "expr": expr,
+                "variables": variables,
+                "params": names,
                 "x": [_list(c) for c in cols],
                 "y": _list(pb.y),
                 "w": _list(pb.weights),
                 "denom": float(pb.denom),
-                "linear_idx": lin,
-                "prog_f": ids[0],
-                "prog_fj": ids[1],
-                "prog_sep": ids[2],
                 "starts": [[k, _list(v)] for k, v in pb.starts.items() if np.all(np.isfinite(v))],
                 "record": record,
             }
@@ -129,10 +153,10 @@ def export_problems(problems: list[Problem], meta: dict, path: Path) -> dict:
     meta = {**meta, "export_s": time.perf_counter() - t0, "skipped": skipped}
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as fh:
-        json.dump({"meta": meta, "programs": programs, "problems": out}, fh, allow_nan=False)
+        json.dump({"meta": meta, "problems": out}, fh, allow_nan=False)
     return {
         "n_exported": len(out),
-        "n_programs": len(programs),
+        "n_models": len(models),
         "skipped": skipped,
         "export_s": meta["export_s"],
     }

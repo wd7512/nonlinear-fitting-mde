@@ -1,2 +1,2 @@
-"""Bridge to the Rust fitter (``rust/``) until the Python bindings replace it: export problems
-as SymPy-compiled tapes, run the bench program and score its records with the Python report."""
+"""Benchmark the Rust fitter: export problems as expression strings, fit them through the
+``symbfitrs`` package (and the native ``varpro`` crate baseline), score with the Python report."""
