@@ -57,7 +57,7 @@ include = [{ path = "LICENSE", format = "sdist" }]
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["docs"]
+extend-exclude = ["docs", "analysis"]  # analysis/: research scripts, not shipped
 target-version = "py312"  # the benchmark; the shipped package supports 3.10
 per-file-target-version = { "python/**" = "py310" }
 

@@ -46,6 +46,12 @@ class FitResult:
     # the start; linear parameters that the solver eliminates are already solved exactly at it.
     steps: int = 0
     trace: np.ndarray | None = None
+    # with several starts (a 2-D `p0`), every start's final loss and parameters, in start order;
+    # `params`, `loss`, `status`, `steps`, the history and the trace are the best start's. Starts
+    # that end at clearly different losses, or at the same loss with different parameters, show
+    # that the fit has more than one optimum.
+    start_losses: np.ndarray = field(default_factory=lambda: np.array([]))
+    start_params: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))
 
     @property
     def success(self) -> bool:
@@ -86,7 +92,40 @@ def _args(variables, x, y, weights, p0):
     m = len(yb) // 8
     xs = [_bytes(c, m, f"x[{v!r}]") for v, c in zip(variables, _columns(x, variables), strict=True)]
     w = None if weights is None else _bytes(weights, m, "weights")
-    return xs, yb, w, None if p0 is None else [float(v) for v in p0]
+    first, _ = _starts(p0)
+    return xs, yb, w, first
+
+
+def _starts(p0):
+    """p0 as (first start, further starts): a 1-D p0 is one start, a 2-D one a start per row."""
+    if p0 is None:
+        return None, []
+    a = np.asarray(p0, dtype=np.float64)
+    if a.ndim == 1:
+        return a.tolist(), []
+    if a.ndim == 2 and len(a) > 0:
+        return a[0].tolist(), a[1:].tolist()
+    raise ValueError("p0 must be 1-D (one start) or 2-D (one start per row)")
+
+
+Bounds = Mapping[str, tuple[float | None, float | None]]
+
+
+def _bounds(params: Sequence[str], bounds: Bounds | None):
+    """{name: (lo, hi)} as (lower, upper) lists in `params` order; None = no bounds."""
+    if not bounds:
+        return None, None
+    unknown = [n for n in bounds if n not in params]
+    if unknown:
+        raise ValueError(f"bounds for unknown parameters {unknown}")
+    lo, hi = [], []
+    for n in params:
+        a, b = bounds.get(n, (None, None))
+        lo.append(-np.inf if a is None else float(a))
+        hi.append(np.inf if b is None else float(b))
+        if np.isnan(lo[-1]) or np.isnan(hi[-1]) or lo[-1] > hi[-1]:
+            raise ValueError(f"bounds for {n!r} must have lower <= upper")
+    return lo, hi
 
 
 def _result(raw) -> FitResult:
@@ -102,7 +141,7 @@ def _result(raw) -> FitResult:
         hist_ms,
         hist_loss,
         steps,
-        trace,
+        (trace, start_losses, start_params),
     ) = raw
     return FitResult(
         tuple(names),
@@ -117,6 +156,8 @@ def _result(raw) -> FitResult:
         np.array(hist_loss),
         steps,
         None if trace is None else np.array(trace, dtype=float).reshape(-1, len(names)),
+        np.array(start_losses, dtype=float),
+        np.array(start_params, dtype=float).reshape(-1, len(names)),
     )
 
 
@@ -157,39 +198,27 @@ class Model:
         budget_ms: float = 5.0,
         trace: bool = False,
         max_steps: int | None = None,
-        bounds: Mapping[str, tuple[float | None, float | None]] | None = None,
-        max_step: float | None = None,
+        bounds: Bounds | None = None,
     ) -> FitResult:
         """Minimise Σ (w (f(x; θ) − y))² from `p0` (default: all ones) within `budget_ms`.
 
-        `trace=True` also returns θ at step 0 (the start) and after every accepted update;
-        `max_steps` stops after that many accepted updates (status "max_steps").
+        `p0` may be 2-D, one start per row: each start is fitted in turn, with an equal share of
+        the budget that is left when it begins, and the lowest loss is kept (`start_losses` and
+        `start_params` report every start).
 
-        Prototype options. `bounds={name: (lo, hi)}` (None = unbounded on that side) keeps every
-        iterate inside the box with an active-set step; the start is clipped into it. Bounds on a
-        linear parameter switch variable projection off. `max_step=c` shortens any step whose
-        largest single-parameter change exceeds `c`, keeping its direction."""
-        lower = upper = None
-        if bounds:
-            unknown = [n for n in bounds if n not in self.params]
-            if unknown:
-                raise ValueError(f"bounds for unknown parameters {unknown}")
-            lower = [
-                -np.inf if bounds.get(n, (None, None))[0] is None else float(bounds[n][0])
-                for n in self.params
-            ]
-            upper = [
-                np.inf if bounds.get(n, (None, None))[1] is None else float(bounds[n][1])
-                for n in self.params
-            ]
+        `bounds={name: (lo, hi)}` (None = unbounded on that side) keeps every iterate inside the
+        box: a parameter on a bound is held there while its gradient points out of the box, and
+        each start is first moved into the box. Use it instead of clipping inside the
+        expression, where the clipped region has zero gradient and a parameter that lands there
+        cannot come back. Bounding a linear parameter turns variable projection off.
+
+        `trace=True` also returns θ at step 0 (the start) and after every accepted update;
+        `max_steps` stops after that many accepted updates (status "max_steps")."""
+        first, more = _starts(p0)
+        lower, upper = _bounds(self.params, bounds)
+        xs, yb, w, _ = _args(self.variables, x, y, weights, None)
         raw = self._core.fit(
-            *_args(self.variables, x, y, weights, p0),
-            float(budget_ms),
-            trace,
-            max_steps,
-            lower,
-            upper,
-            None if max_step is None else float(max_step),
+            xs, yb, w, first, float(budget_ms), trace, max_steps, more, lower, upper
         )
         return _result(raw)
 
@@ -223,25 +252,36 @@ class Pool:
         progress: bool = True,
         trace: bool = False,
         max_steps: int | None = None,
+        bounds: Bounds | None = None,
     ) -> list[FitResult]:
         """Each job is (model, x, y), (model, x, y, p0) or (model, x, y, p0, weights), where
         model is a compiled Model or an expression over `variables`. Results come back in job
         order; a job that cannot run gets status "error" instead of stopping the batch. Each
         job's budget starts when a thread picks it up. Repeated expressions are compiled once.
-        `trace` and `max_steps` apply to every job, as in `Model.fit`."""
+        A 2-D `p0` gives that job several starts, as in `Model.fit`. `trace`, `max_steps` and
+        `bounds` apply to every job; a job whose model lacks a bounded name is an error."""
         variables = list(variables)
         raw, errors = [], {}
+        params_of: dict[tuple, list[str]] = {}
         for i, (model, x, y, *rest) in enumerate(jobs):
             p0, weights = (*rest, None, None)[:2]
             try:
                 if isinstance(model, Model):
-                    src, names = model._core, model.variables
+                    src, names, params = model._core, model.variables, model.params
                 else:
-                    src, names = model, variables
-                raw.append((src, names, *_args(names, x, y, weights, p0)))
+                    src, names, params = model, variables, None
+                    if bounds:  # bounds are by name, so the expression's parameters are needed here
+                        key = (model, tuple(variables))
+                        if key not in params_of:
+                            params_of[key] = compile(model, variables).params
+                        params = params_of[key]
+                lower, upper = _bounds(params, bounds) if bounds else (None, None)
+                first, more = _starts(p0)
+                xs, yb, w, _ = _args(names, x, y, weights, None)
+                raw.append((src, names, xs, yb, w, first, (more, lower, upper)))
             except ValueError as e:
                 errors[i] = str(e)
-                raw.append(("", variables, [], b"", None, None))  # placeholder, replaced below
+                raw.append(("", variables, [], b"", None, None, ([], None, None)))  # placeholder
         bar = None
         if progress:
             from tqdm.auto import tqdm

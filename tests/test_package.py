@@ -195,23 +195,38 @@ def test_bounds_keep_the_fit_inside_the_box_and_validate_names():
     )
 
 
-def test_a_bounded_linear_parameter_and_the_step_cap():
+def test_a_bounded_linear_parameter_is_held_at_its_bound():
     x, y = _exp_problem()
     m = sf.compile("a*exp(-b*x) + c")
     r = m.fit(x, -y, bounds={"a": (0, None)})  # the true amplitude is negative: held at its bound
     assert abs(r["a"]) < 1e-12
-    full = sf.compile("exp(-b*x)*sin(c*x)")
-    t = np.linspace(0, 6, 60)
-    r = full.fit(
-        t,
-        np.exp(-0.4 * t) * np.sin(1.3 * t),
-        p0=[0.8, 1.0],
-        max_step=0.05,
-        trace=True,
-        budget_ms=500,
-    )
-    assert np.abs(np.diff(r.trace, axis=0)).max() <= 0.05 + 1e-12 and r["b"] == pytest.approx(
-        0.4, abs=1e-6
-    )
     with pytest.raises(ValueError):
-        m.fit(x, y, max_step=0.0)
+        m.fit(x, y, bounds={"b": (1.0, 0.0)})
+
+
+def test_several_starts_keep_the_best():
+    m = sf.compile("a*sin(c*x)")
+    x = np.arange(200) * 0.05
+    y = 1.5 * np.sin(3.0 * x)
+    one = m.fit(x, y, p0=[1.0, 0.5], budget_ms=200)
+    assert one.loss > 1e-3 and one.start_losses.shape == (1,) and one.start_params.shape == (1, 2)
+    r = m.fit(x, y, p0=[[1.0, 0.5], [1.0, 2.9], [1.0, 9.0]], budget_ms=300)
+    assert r.loss < 1e-20 and r["c"] == pytest.approx(3.0, abs=1e-8)
+    assert r.start_losses.shape == (3,) and r.start_params.shape == (3, 2)
+    assert r.start_losses[1] == r.loss and r.start_losses[0] == one.loss
+    with pytest.raises(ValueError):
+        m.fit(x, y, p0=np.ones((1, 2, 2)))
+
+
+def test_fit_many_takes_bounds_and_several_starts():
+    x, y = _exp_problem()
+    expr = "a*exp(-b*x) + c"
+    jobs = [
+        (expr, x, -y),  # an expression: its parameters are found by name for the bounds
+        (sf.compile(expr), x, -y, [[1.0, 1.0, 0.0], [2.0, 0.5, 0.0]]),
+        ("k*x", x, y),  # no parameter "a": an error for this job only
+    ]
+    r = sf.Pool(threads=2).fit_many(jobs, bounds={"a": (0, None)}, progress=False)
+    assert abs(r[0]["a"]) < 1e-12 and abs(r[1]["a"]) < 1e-12
+    assert r[1].start_losses.shape == (2,)
+    assert r[2].status == "error" and "unknown parameters" in r[2].message

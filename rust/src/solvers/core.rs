@@ -22,14 +22,11 @@ pub struct Opts {
     /// trial point is clipped into the box. `None` on both = unbounded (the default behaviour).
     pub lower: Option<Vec<f64>>,
     pub upper: Option<Vec<f64>>,
-    /// Cap on the largest change of any one variable in a single step (∞-norm); a longer step is
-    /// shortened, keeping its direction.
-    pub max_step: Option<f64>,
 }
 
 impl Default for Opts {
     fn default() -> Self {
-        Opts { ftol: 1e-15, xtol: 1e-15, gtol: 1e-15, tau: 1e-3, loss_floor: 1e-32, lower: None, upper: None, max_step: None }
+        Opts { ftol: 1e-15, xtol: 1e-15, gtol: 1e-15, tau: 1e-3, loss_floor: 1e-32, lower: None, upper: None }
     }
 }
 
@@ -137,15 +134,6 @@ fn run<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
             }
             delta.copy_from(&step.component_div(&d));
             let mut modified = false;
-            if let Some(c) = o.max_step {
-                let mx = delta.amax();
-                if mx > c {
-                    let k = c / mx;
-                    delta *= k;
-                    step *= k;
-                    modified = true;
-                }
-            }
             xt.copy_from(&(&x + &delta));
             if bounded {
                 for &j in &free {
@@ -157,7 +145,7 @@ fn run<F: Lsq>(f: &mut F, x0: &DVector<f64>, o: &Opts) -> Result<Status, Stop> {
                 }
             }
             if modified {
-                // the step was shortened or clipped: its predicted reduction is that of the step actually taken
+                // the step was clipped into the box: its predicted reduction is that of the step actually taken
                 delta.copy_from(&(&xt - &x));
                 step.copy_from(&delta.component_mul(&d));
                 let jd = &jac * &delta;
