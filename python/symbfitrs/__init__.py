@@ -86,8 +86,16 @@ def _args(variables, x, y, weights, p0):
 def _result(raw) -> FitResult:
     names, params, loss, status, message, nfev, n_nonfinite, time_ms, hist_ms, hist_loss = raw
     return FitResult(
-        tuple(names), np.array(params), loss, status, message, nfev, time_ms, n_nonfinite,
-        np.array(hist_ms), np.array(hist_loss),
+        tuple(names),
+        np.array(params),
+        loss,
+        status,
+        message,
+        nfev,
+        time_ms,
+        n_nonfinite,
+        np.array(hist_ms),
+        np.array(hist_loss),
     )
 
 

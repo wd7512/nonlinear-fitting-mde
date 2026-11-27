@@ -300,4 +300,3 @@ def run(
     final = out_dir / "records.jsonl"
     merge_records(parts, final)
     build_report(final, out_dir, run_info=None, t_invocation=t_invocation, plot=plot)
-
