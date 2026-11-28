@@ -1,0 +1,9 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+  adam real even: 375s
+  adam real odd: 731s
+  adam real rr: 821s
+  adam real hold: 899s
+  adam synth even: 984s
+  adam synth odd: 1070s
+  adam synth rr: 1155s
+  adam synth hold: 1234s

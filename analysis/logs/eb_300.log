@@ -1,0 +1,9 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+--- step 9: real data, 300 neurons: weighted profile (mean-variance noise model) + log-normal prior
+  even: median best weighted MSE 0.56 (1 = noise model right)
+  odd: median best weighted MSE 0.56 (1 = noise model right)
+  543s
+  population: log p ~ N(0.87, 0.43^2) -> median p 2.38, central 80% of neurons 1.37-4.16
+  per cell: median 95% width 1.70; narrower than 1.0 in 17%; split-half ICC 0.47; |diff| > 0.5 in 22%
+  even and odd 95% intervals overlap in 100% of neurons
+  double-peaked cells: 199 of 300; median posterior min p 1.85 (95% CI 1.81-1.91)

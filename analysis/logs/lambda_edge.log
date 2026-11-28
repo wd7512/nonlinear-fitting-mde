@@ -1,0 +1,10 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+  CV fold 1/5
+  CV fold 2/5
+  CV fold 3/5
+  CV fold 4/5
+  CV fold 5/5
+lambda   1.0: mean relative CV loss 1.0448, median CV loss 4.43821
+lambda   3.0: mean relative CV loss 1.0287, median CV loss 4.39849
+lambda  10.0: mean relative CV loss 1.0150, median CV loss 4.41738
+share of cells best at each lambda [0.38 0.07 0.55]

@@ -1,0 +1,27 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+  adam real even: 96s
+  adam real odd: 192s
+  adam real rr: 280s
+  adam real hold: 366s
+  adam synth even: 454s
+  adam synth odd: 550s
+  adam synth rr: 642s
+  adam synth hold: 725s
+
+60 neurons; held-out angles = 42 of 214 bins; symbfitrs: 100 ms per start
+REAL DATA
+dR2 = mean paired test-R2 difference against "E: bounds+8 starts" (medians of 60 cells are too noisy)
+method                    dR2 heldout df_eff   ICC rr>.5 p@max  conv  secs
+estimator only         -0.014   1.000    3.8 -0.02    0%    8%  nan%     0
+Adam, early stop       +0.004   0.923   10.5  0.16   18%   13%  nan%   725
+Adam, no stop          -0.000   0.927   12.7  0.12    0%   42%  nan%     0
+E: bounds+8 starts     +0.000   0.902   14.3 -0.02    3%    0%   85%    30
+E, 1 start             -0.000   0.928   11.8  0.00    0%    0%   80%     3
+SYNTHETIC (known truth; curve err in noise-SE units, lower = less noise fitted)
+method                    dR2 heldout df_eff  curve  RMSEp  bias  in.5 dblRMSE strRMSE str.5 rr>.5 p@max
+estimator only         -0.026   1.000   -1.2  0.390   0.56 -0.18   73%    0.34    0.45   72%    0%   18%
+Adam, early stop       +0.001   0.927    3.0  0.255   0.62 -0.14   68%    0.35    1.43   78%    7%   25%
+Adam, no stop          +0.001   0.921    3.6  0.270   0.65 -0.19   60%    0.44    1.59   67%    0%   27%
+E: bounds+8 starts     +0.000   0.907    4.6  0.274   0.66 -0.10   60%    0.62    5.79   68%    2%    0%
+E, 1 start             +0.001   0.917    5.0  0.276   0.64 -0.15   63%    0.61    1.16   67%    0%    0%
+(18 of 60 synthetic cells are clearly double-peaked)

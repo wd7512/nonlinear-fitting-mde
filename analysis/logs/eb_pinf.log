@@ -1,0 +1,26 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+--- step 4: heteroscedastic noise: weights 1/sd per bin (the true SE on synthetic data)
+  178s
+weighted, shared prior (both halves)         coverage 50%: 33% 80%: 58% 90%: 70% 95%: 73%   90% width 0.65   RMSE 1.29  bias +0.03
+weighted, prior from the odd half            coverage 50%: 35% 80%: 53% 90%: 65% 95%: 73%   90% width 0.62   RMSE 0.36  bias +0.04
+--- step 6: weighted likelihood + log-normal prior by marginal likelihood (no tuning knob)
+  fitted prior: log p ~ N(0.65, 0.43^2), median p 1.92 (truth: uniform 0.7-3, median 1.85)
+weighted + log-normal prior (both halves)    coverage 50%: 40% 80%: 73% 90%: 82% 95%: 87%   90% width 0.65   RMSE 0.37  bias +0.02
+weighted + log-normal prior (odd half only)  coverage 50%: 40% 80%: 73% 90%: 82% 95%: 87%   90% width 0.65   RMSE 0.37  bias +0.02
+  split-half ICC of the posterior mean -0.05; |diff| > 0.5 in 8%
+--- step 9: real data, 60 neurons: weighted profile (mean-variance noise model) + log-normal prior
+  even: median best weighted MSE 0.61 (1 = noise model right)
+  odd: median best weighted MSE 0.63 (1 = noise model right)
+  205s
+  population: log p ~ N(0.84, 0.49^2) -> median p 2.31, central 80% of neurons 1.23-4.34
+  per cell: median 95% width 1.92; narrower than 1.0 in 17%; split-half ICC 0.42; |diff| > 0.5 in 32%
+  even and odd 95% intervals overlap in 98% of neurons
+  double-peaked cells: 39 of 60; median posterior min p 1.87 (95% CI 1.75-1.98)
+--- step 9: real data, 300 neurons: weighted profile (mean-variance noise model) + log-normal prior
+  even: median best weighted MSE 0.55 (1 = noise model right)
+  odd: median best weighted MSE 0.56 (1 = noise model right)
+  880s
+  population: log p ~ N(0.84, 0.49^2) -> median p 2.31, central 80% of neurons 1.23-4.34
+  per cell: median 95% width 1.86; narrower than 1.0 in 17%; split-half ICC 0.44; |diff| > 0.5 in 32%
+  even and odd 95% intervals overlap in 99% of neurons
+  double-peaked cells: 199 of 300; median posterior min p 1.88 (95% CI 1.83-1.96)

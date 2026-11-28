@@ -1,0 +1,19 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+arm C
+arm C saved in 24s
+arm D
+arm D saved in 34s
+arm E
+arm E saved in 269s
+arm B
+arm B saved in 53s
+arm A
+A even: 250s
+arm A saved in 1941s
+arm boot_D
+  boot D 10/50 65s
+  boot D 20/50 130s
+  boot D 30/50 195s
+  boot D 40/50 262s
+  boot D 50/50 328s
+arm boot_D saved in 328s
