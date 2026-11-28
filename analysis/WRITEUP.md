@@ -27,7 +27,9 @@ Branch `claude/focused-hopper-o1g2wl`. Every number below comes from the scripts
   2. multi-start through a 2-D `p0`;
   3. `Model.profile()`.
 
-UNCAPPED_SUMMARY
+- **Removing the cap on p** makes least squares worse: p exceeds 10 in about 30% of neurons, split-half agreement collapses and held-out R² drops slightly. The cap of 4 was acting as a regulariser.
+
+UNCAPPED_EB_SUMMARY
 
 ## 1. Why the notebooks' R² and curves differ
 
@@ -119,11 +121,38 @@ Adam's held-out angles only choose when to stop; they add no data. This section 
 - Per neuron, the median 95% interval is 1.7 wide.
 - The two halves' intervals overlap in every neuron (ICC 0.47).
 
-UNCAPPED_SECTION
+## 5. Capped vs uncapped p (`P_CAP=inf`)
+
+The notebooks clip p to [0.1, 4]. Every arm was rerun with no upper limit; the lower limit and the width limits stay (`analysis/consistency_pinf/`, `consistency_pinf.png`).
+
+| Method | Any p > 4 | Any p > 10 | Split-half ICC of min p (capped → uncapped) | Reproducible cells (capped → uncapped) | Held-out R² minus Adam (95% CI) | Reaches best optimum |
+|---|---|---|---|---|---|---|
+| A: Adam notebook | 18% | 3% | 0.37 → 0.39 | 41 → 37 | 0 | 14% |
+| B: our notebook (λ = 1) | 10% | 2% | 0.36 → 0.36 | 74 → 74 | +0.0003 (−0.0002, +0.0009) | 0% |
+| C: symbfitrs today (clipped) | 40% | 21% | 0.33 → 0.33 | 41 → 16 | −0.0004 (−0.0013, −0.0001) | 49% |
+| D: bounds | 49% | 29% | 0.25 → 0.07 | 38 → 17 | −0.0005 (−0.0011, −0.0001) | 61% |
+| E: bounds + 8 starts | 49% | 31% | 0.24 → 0.01 | 40 → 18 | −0.0005 (−0.0012, 0.0000) | 81% |
+
+- **Least squares:** without the cap, p runs away; it exceeds 10 in 21–31% of neurons, as flat-topped or box-shaped peaks.
+  - Split-half agreement of min p collapses for the true-optimum fits (E: 0.24 → 0.01).
+  - Held-out R² gets slightly worse, so the extra freedom fits noise.
+- **Adam and our penalised fit barely change.** Early stopping and the penalty keep p near the estimator, so the cap rarely bound them.
+- **The cap was acting as a regulariser.** The data do not identify p at its upper end. A per-neuron least-squares p is therefore only as meaningful as the cap chosen.
+- **Single-start uncapped fits can be worse than capped ones.** On one neuron, D settled at p1 = 5.3 with a higher loss than the capped optimum. Several starts mostly fix this: E reaches the best optimum in 81% of neurons.
+
+UNCAPPED_EB
 
 ## 6. Library features (PRs into `dev`)
 
-PR_LIST
+- [wd7512/symbfitrs#21](https://github.com/wd7512/symbfitrs/pull/21): active-set `bounds=` on `Model.fit` and `Pool.fit_many`.
+- [wd7512/symbfitrs#22](https://github.com/wd7512/symbfitrs/pull/22): multi-start through a 2-D `p0`, with `start_losses` and `start_params`.
+- [wd7512/symbfitrs#23](https://github.com/wd7512/symbfitrs/pull/23): `Model.profile()`.
+
+Each PR branches from `dev` independently, and #21 and #22 need a small rebase against each other.
+
+The gate could not run, because its tier files need full local benchmark runs. Instead, `default_path_regression.py` compared each PR with `dev` on 500 fits:
+- all 480 non-deadline fits are bit-identical to `dev`;
+- wall time is within 0.3% (results in `pr_regression/`).
 
 - **Bounds.** A parameter on a bound is dropped from the LM step while its gradient points out of the box, and is released when the gradient turns inward. Each trial point is clipped into the box, and the predicted reduction is recomputed for the clipped step. With lo = hi it fixes a parameter. On the clipped notebook model, bounds that replace the clips raise the share of neurons reaching the best optimum from 51–57% to 67–76%.
 - **Multi-start.** A 2-D `p0` gives one start per row, within one job's budget. `start_losses` and `start_params` show per cell whether the optimum is unique.
