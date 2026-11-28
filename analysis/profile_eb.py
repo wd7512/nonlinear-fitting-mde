@@ -16,7 +16,7 @@ import numpy as np
 import symbfitrs
 import explore as X
 
-GRID = np.geomspace(0.4, 4.0, 13)
+GRID = np.geomspace(0.4, 16.0, 17) if X.C.UNCAPPED else np.geomspace(0.4, 4.0, 13)   # P_CAP=inf: p up to 16
 V = X.variant()                      # bounds + starts, sigma widths, p in [0.1, 4]
 STARTS = 3
 
@@ -75,7 +75,7 @@ if __name__ == '__main__':
             L, secs = profile(X.DATA[d][h], X.SIGMA2[d])
             out[d, h] = L
             print(f'profile {d} {h}: {secs:.0f}s for {L.size} grid fits', flush=True)
-    np.save('analysis/explore/profile_L.npy', {f'{d}_{h}': v for (d, h), v in out.items()}, allow_pickle=True)
+    np.save(f'analysis/explore/profile_L{X.SUF}.npy', {f'{d}_{h}': v for (d, h), v in out.items()}, allow_pickle=True)
     truth = X.TRUTH[:, 8:10].min(1)
     for d in ('synth', 'real'):
         g = npmle(np.concatenate([out[d, 'even'], out[d, 'odd']]))

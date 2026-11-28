@@ -17,7 +17,8 @@ Parameters: split-half ICC of min p, run-to-run share moving > 0.5, share with p
 synthetic RMSE / median error of min p.
 
 usage: PYTHONPATH=analysis python analysis/explore.py [name-substring ...]   (default: all)
-Adam is run once and cached in analysis/explore/adam.npz (delete it to rerun).
+Adam is run once and cached in analysis/explore/adam[_pinf].npz (delete it to rerun).
+P_CAP=inf (see consistency.py) removes the exponent cap in every method.
 """
 import os, sys, time
 import numpy as np
@@ -27,6 +28,7 @@ import consistency as C
 
 N_SUB, STARTS, MS_PER_START = 60, 8, 100.0
 OUT = 'analysis/explore'; os.makedirs(OUT, exist_ok=True)
+SUF = '_pinf' if C.UNCAPPED else ''          # uncapped runs (P_CAP=inf) cache and save beside the capped ones
 SUB = np.arange(0, C.N, C.N // N_SUB)[:N_SUB]
 TH = C.TH[SUB]; NB = TH.shape[1]
 LN2 = 0.6931471805599453
@@ -60,7 +62,8 @@ def peak(off, l, r, p, hwhm):
     return f'exp(-{LN2 if hwhm else 0.5}*(max(abs({d}), 1e-12)/{w})^{p})'
 
 
-def variant(p_max=4.0, w_max=2 * np.pi, hwhm=False, starts=STARTS, w_min=None):
+def variant(p_max=None, w_max=2 * np.pi, hwhm=False, starts=STARTS, w_min=None):
+    p_max = (C.P_MAX if C.UNCAPPED else 4.0) if p_max is None else p_max     # P_CAP=inf: no exponent cap
     m = symbfitrs.compile(f'b + a1*{peak(0, "l1", "r1", "p1", hwhm)} + a2*{peak("pi", "l2", "r2", "p2", hwhm)}')
     w_min = (0.05 if hwhm else 0.1) if w_min is None else w_min
     bounds = {'b': (0, None), 'a1': (0, None), 'a2': (0, None),
@@ -148,7 +151,7 @@ def adam_protocol(Y, bins, seed):
 
 
 def adam_cache():
-    path = f'{OUT}/adam.npz'
+    path = f'{OUT}/adam{SUF}.npz'
     if os.path.exists(path):
         return dict(np.load(path))
     torch.set_num_threads(4); out = {}; t0 = time.time()
@@ -258,4 +261,4 @@ if __name__ == '__main__':
         print(f'{n:22s}{o["dr2"]:+7.3f}{np.median(o["hold"] / ref["synth"]["hold"]):8.3f}{o["df"]:7.1f}{o["curve"]:7.3f}'
               f'{o["rmse"]:7.2f}{o["bias"]:+6.2f}{o["within"]:6.0%}{o["rmse_dbl"]:8.2f}{o["rmse_strong"]:8.2f}{o["within_strong"]:6.0%}{o["rr"]:6.0%}{o["at_p"]:6.0%}')
     print(f'({DOUBLE.sum()} of {N_SUB} synthetic cells are clearly double-peaked)')
-    np.save(f'{OUT}/last_run.npy', {n: {d: {k: v for k, v in R[n][d].items() if k != 'r2_all'} if isinstance(R[n][d], dict) else R[n][d] for d in R[n]} for n in names}, allow_pickle=True)
+    np.save(f'{OUT}/last_run{SUF}.npy', {n: {d: {k: v for k, v in R[n][d].items() if k != 'r2_all'} if isinstance(R[n][d], dict) else R[n][d] for d in R[n]} for n in names}, allow_pickle=True)

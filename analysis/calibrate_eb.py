@@ -19,7 +19,8 @@ import profile_eb as P
 LEVELS = (0.5, 0.8, 0.9, 0.95)
 LS = np.load('analysis/explore/profile_L.npy', allow_pickle=True).item()
 TRUTH_MIN = X.TRUTH[:, 8:10].min(1)
-FINE = np.geomspace(P.GRID[0], P.GRID[-1], 61)
+FINE = np.geomspace(P.GRID[0], P.GRID[-1], 81 if X.C.UNCAPPED else 61)
+SUF = X.SUF
 
 
 def refine(L, grid=P.GRID, fine=FINE):
@@ -145,7 +146,7 @@ def step3():
     for name, L in (('cheap', Lc), ('careful', Lh)):
         top = L.reshape(len(L), -1).max(1)
         print(f'  {name:8s}: median log-lik range over the grid {np.median(top - L.reshape(len(L), -1).min(1)):.1f}')
-    np.save('analysis/explore/profile_careful.npy', {'cells': cells, 'L': Lh})
+    np.save(f'analysis/explore/profile_careful{SUF}.npy', {'cells': cells, 'L': Lh})
 
 
 def step4():
@@ -153,7 +154,7 @@ def step4():
     import time; t0 = time.time(); cells = np.arange(X.N_SUB)
     L = {h: profile_cells(cells, X.DATA['synth'][h], 3, 30.0, sd=X._sd_syn) for h in ('even', 'odd')}
     print(f'  {time.time() - t0:.0f}s')
-    np.save('analysis/explore/profile_weighted.npy', L)
+    np.save(f'analysis/explore/profile_weighted{SUF}.npy', L)
     Lf = {h: refine(L[h]) for h in L}
     g1, g2 = npmle2(np.concatenate([Lf['even'], Lf['odd']]))
     report('weighted, shared prior (both halves)', *posterior(Lf['even'], g1, g2, FINE))
@@ -163,7 +164,7 @@ def step4():
 
 def step6():
     print('--- step 6: weighted likelihood + log-normal prior by marginal likelihood (no tuning knob)')
-    Lw = np.load('analysis/explore/profile_weighted.npy', allow_pickle=True).item()
+    Lw = np.load(f'analysis/explore/profile_weighted{SUF}.npy', allow_pickle=True).item()
     Lf = {h: refine(Lw[h]) for h in Lw}
     g, mu, sd = lognormal_prior(np.concatenate([Lf['even'], Lf['odd']]))
     print(f'  fitted prior: log p ~ N({mu:.2f}, {sd:.2f}^2), median p {np.exp(mu):.2f} (truth: uniform 0.7-3, median 1.85)')
@@ -203,7 +204,7 @@ def step7():
         L[h] = profile_cells(cells, X.DATA['synth'][h], 3, 30.0, sd=X._sd_syn, keep=par)
         C[h] = laplace(par, X._sd_syn)
     print(f'  {time.time() - t0:.0f}s; correction range per cell (median): {np.median(np.ptp(C["even"].reshape(X.N_SUB, -1), 1)):.1f} log units')
-    np.save('analysis/explore/profile_laplace.npy', {'L': L, 'C': C})
+    np.save(f'analysis/explore/profile_laplace{SUF}.npy', {'L': L, 'C': C})
     for name, Lx in (('weighted profile', L), ('weighted profile + Laplace', {h: L[h] + C[h] for h in L})):
         Lf = {h: refine(Lx[h]) for h in Lx}
         g, mu, sd = lognormal_prior(np.concatenate([Lf['even'], Lf['odd']]))
@@ -242,7 +243,7 @@ def step8():
         d = L2[h] - L[h]
         print(f'  {h}: points improved by > 0.5 log units {np.mean(d > 0.5):.1%}, max {d.max():.1f}', flush=True)
     print(f'  {time.time() - t0:.0f}s')
-    np.save('analysis/explore/profile_continued.npy', L2)
+    np.save(f'analysis/explore/profile_continued{SUF}.npy', L2)
     for name, Lx in (('one pass', L), ('with continuation', L2)):
         Lf = {h: refine(Lx[h]) for h in Lx}
         g, mu, sd = lognormal_prior(np.concatenate([Lf['even'], Lf['odd']]))
@@ -291,7 +292,7 @@ def step9(rows=None, tag='sub60'):
         # noise-model check: best-fit weighted MSE should be about 1 if the variances are right
         print(f'  {h}: median best weighted MSE {np.median(-2 * L[h].reshape(len(rows), -1).max(1) / C.TH.shape[1]):.2f} (1 = noise model right)', flush=True)
     print(f'  {time.time() - t0:.0f}s')
-    np.save(f'analysis/explore/profile_real_{tag}.npy', {'rows': rows, **L})
+    np.save(f'analysis/explore/profile_real_{tag}{SUF}.npy', {'rows': rows, **L})
     # the mean-variance line overestimates the noise (best weighted MSE ~0.62 where ~0.95 is
     # expected), so rescale each cell's noise to its own residuals (a no-op when it is right)
     n = C.TH.shape[1]
