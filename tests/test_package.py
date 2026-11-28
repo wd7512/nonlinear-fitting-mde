@@ -179,3 +179,32 @@ def test_fit_many_trace_matches_fit():
         assert got.status == want.status == "max_steps" and got.steps == 4
         np.testing.assert_array_equal(got.trace, want.trace)
     assert sf.Pool(threads=1).fit_many(jobs, progress=False)[0].trace is None
+
+
+def test_several_starts_keep_the_best():
+    m = sf.compile("a*sin(c*x)")
+    x = np.arange(200) * 0.05
+    y = 1.5 * np.sin(3.0 * x)
+    one = m.fit(x, y, p0=[1.0, 0.5], budget_ms=200)
+    assert one.loss > 1e-3 and one.start_losses.shape == (1,) and one.start_params.shape == (1, 2)
+    r = m.fit(x, y, p0=[[1.0, 0.5], [1.0, 2.9], [1.0, 9.0]], budget_ms=300)
+    assert r.loss < 1e-20 and r["c"] == pytest.approx(3.0, abs=1e-8)
+    assert r.start_losses.shape == (3,) and r.start_params.shape == (3, 2)
+    assert r.start_losses[1] == r.loss and r.start_losses[0] == one.loss
+    with pytest.raises(ValueError):
+        m.fit(x, y, p0=np.ones((1, 2, 2)))
+
+
+def test_fit_many_takes_several_starts():
+    m = sf.compile("a*sin(c*x)")
+    x = np.arange(200) * 0.05
+    y = 1.5 * np.sin(3.0 * x)
+    jobs = [
+        (m, x, y, [[1.0, 0.5], [1.0, 2.9]]),
+        (m, x, y, [1.0, 0.5]),
+        (m, x, y, np.ones((1, 2, 2))),
+    ]
+    r = sf.Pool(threads=2).fit_many(jobs, budget_ms=300, progress=False)
+    assert r[0].loss < 1e-20 and r[0].start_losses.shape == (2,)
+    assert r[1].start_losses.shape == (1,) and r[1].loss > 1e-3
+    assert r[2].status == "error"

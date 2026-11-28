@@ -46,6 +46,12 @@ class FitResult:
     # the start; linear parameters that the solver eliminates are already solved exactly at it.
     steps: int = 0
     trace: np.ndarray | None = None
+    # with several starts (a 2-D `p0`), every start's final loss and parameters, in start order;
+    # `params`, `loss`, `status`, `steps`, the history and the trace are the best start's. Starts
+    # that end at clearly different losses, or at the same loss with different parameters, show
+    # that the fit has more than one optimum.
+    start_losses: np.ndarray = field(default_factory=lambda: np.array([]))
+    start_params: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))
 
     @property
     def success(self) -> bool:
@@ -86,7 +92,20 @@ def _args(variables, x, y, weights, p0):
     m = len(yb) // 8
     xs = [_bytes(c, m, f"x[{v!r}]") for v, c in zip(variables, _columns(x, variables), strict=True)]
     w = None if weights is None else _bytes(weights, m, "weights")
-    return xs, yb, w, None if p0 is None else [float(v) for v in p0]
+    first, _ = _starts(p0)
+    return xs, yb, w, first
+
+
+def _starts(p0):
+    """p0 as (first start, further starts): a 1-D p0 is one start, a 2-D one a start per row."""
+    if p0 is None:
+        return None, []
+    a = np.asarray(p0, dtype=np.float64)
+    if a.ndim == 1:
+        return a.tolist(), []
+    if a.ndim == 2 and len(a) > 0:
+        return a[0].tolist(), a[1:].tolist()
+    raise ValueError("p0 must be 1-D (one start) or 2-D (one start per row)")
 
 
 def _result(raw) -> FitResult:
@@ -102,7 +121,7 @@ def _result(raw) -> FitResult:
         hist_ms,
         hist_loss,
         steps,
-        trace,
+        (trace, start_losses, start_params),
     ) = raw
     return FitResult(
         tuple(names),
@@ -117,6 +136,8 @@ def _result(raw) -> FitResult:
         np.array(hist_loss),
         steps,
         None if trace is None else np.array(trace, dtype=float).reshape(-1, len(names)),
+        np.array(start_losses, dtype=float),
+        np.array(start_params, dtype=float).reshape(-1, len(names)),
     )
 
 
@@ -160,10 +181,16 @@ class Model:
     ) -> FitResult:
         """Minimise Σ (w (f(x; θ) − y))² from `p0` (default: all ones) within `budget_ms`.
 
+        `p0` may be 2-D, one start per row: each start is fitted in turn, with an equal share of
+        the budget that is left when it begins, and the lowest loss is kept (`start_losses` and
+        `start_params` report every start).
+
         `trace=True` also returns θ at step 0 (the start) and after every accepted update;
-        `max_steps` stops after that many accepted updates (status "max_steps")."""
+        `max_steps` stops after that many accepted updates (status "max_steps"). With several
+        starts, the status, steps and trace are the best start's."""
+        _, more = _starts(p0)
         raw = self._core.fit(
-            *_args(self.variables, x, y, weights, p0), float(budget_ms), trace, max_steps
+            *_args(self.variables, x, y, weights, p0), float(budget_ms), trace, max_steps, more
         )
         return _result(raw)
 
@@ -202,7 +229,8 @@ class Pool:
         model is a compiled Model or an expression over `variables`. Results come back in job
         order; a job that cannot run gets status "error" instead of stopping the batch. Each
         job's budget starts when a thread picks it up. Repeated expressions are compiled once.
-        `trace` and `max_steps` apply to every job, as in `Model.fit`."""
+        A 2-D `p0` gives that job several starts, as in `Model.fit`. `trace` and `max_steps`
+        apply to every job."""
         variables = list(variables)
         raw, errors = [], {}
         for i, (model, x, y, *rest) in enumerate(jobs):
@@ -212,10 +240,11 @@ class Pool:
                     src, names = model._core, model.variables
                 else:
                     src, names = model, variables
-                raw.append((src, names, *_args(names, x, y, weights, p0)))
+                _, more = _starts(p0)
+                raw.append((src, names, *_args(names, x, y, weights, p0), more))
             except ValueError as e:
                 errors[i] = str(e)
-                raw.append(("", variables, [], b"", None, None))  # placeholder, replaced below
+                raw.append(("", variables, [], b"", None, None, []))  # placeholder
         bar = None
         if progress:
             from tqdm.auto import tqdm
