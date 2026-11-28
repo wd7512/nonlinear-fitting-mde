@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::expr::Compiled;
-use crate::fit::fit;
+use crate::fit::fit_with;
+use crate::solvers::core::Opts;
 use crate::problem::Problem;
 use crate::solvers::Status;
 use crate::tape::Bound;
@@ -24,6 +25,10 @@ pub struct Data {
     pub trace: bool,
     /// Stop after this many accepted updates.
     pub max_steps: Option<usize>,
+    /// Box constraints per parameter (±∞ = free): an active-set LM keeps every iterate inside,
+    /// and the start is first moved into the box.
+    pub lower: Option<Vec<f64>>,
+    pub upper: Option<Vec<f64>>,
 }
 
 #[derive(Clone, Debug)]
@@ -78,11 +83,17 @@ pub fn fit_one(c: &Compiled, data: Data, budget_ms: f64) -> Result<Outcome, Stri
         Some(p0) => p0,
         None => vec![1.0; p],
     };
+    for (name, b) in [("lower", &data.lower), ("upper", &data.upper)] {
+        if b.as_ref().is_some_and(|b| b.len() != p) {
+            return Err(format!("{name} bounds must have {p} values, one per parameter"));
+        }
+    }
+    let opts = Opts { lower: data.lower.clone(), upper: data.upper.clone(), ..Opts::default() };
     let mut prob = Problem::new(c, &data.x, data.y, data.w)?;
     let setup_ms = t0.elapsed().as_secs_f64() * 1e3;
     let mut tr = Tracker::new(budget_ms - setup_ms, &[], prob.inv_scale);
     tr.enable_trace(data.trace, data.max_steps);
-    let status = match catch_unwind(AssertUnwindSafe(|| fit(&mut prob, &theta0, &mut tr).0)) {
+    let status = match catch_unwind(AssertUnwindSafe(|| fit_with(&mut prob, &theta0, &mut tr, &opts).0)) {
         Ok(s) => s,
         Err(e) => {
             let msg = e.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| e.downcast_ref::<String>().cloned());
@@ -194,6 +205,50 @@ mod tests {
         assert_eq!((z.status, z.steps, z.trace.as_ref().map(Vec::len)), ("max_steps", 0, Some(1)));
         // tracing off: nothing recorded
         assert!(fit_one(&c, exp_data(2.0, 0.7, 0.3), 100.0).unwrap().trace.is_none());
+    }
+
+    #[test]
+    fn bounds_hold_the_optimum_on_the_bound_and_inactive_bounds_change_nothing() {
+        let c = compile("a*exp(-b*x) + c", &["x".into()], None).unwrap();
+        let free = fit_one(&c, exp_data(2.0, 0.7, 0.3), 100.0).unwrap();
+        // b is the only nonlinear parameter: the true value 0.7 lies above the cap of 0.5
+        let mut d = exp_data(2.0, 0.7, 0.3);
+        d.p0 = Some(vec![1.0, 0.2, 0.0]);
+        d.trace = true;
+        d.lower = Some(vec![f64::NEG_INFINITY; 3]);
+        d.upper = Some(vec![f64::INFINITY, 0.5, f64::INFINITY]);
+        let o = fit_one(&c, d, 100.0).unwrap();
+        assert!((o.params[1] - 0.5).abs() < 1e-12, "{o:?}");
+        assert!(o.trace.unwrap().iter().all(|t| t[1] <= 0.5 + 1e-12));
+        // bounds that never bind give the unbounded trajectory exactly
+        let mut d = exp_data(2.0, 0.7, 0.3);
+        d.lower = Some(vec![f64::NEG_INFINITY, -1e6, f64::NEG_INFINITY]); // only the nonlinear b: bounding a linear one turns projection off
+        d.upper = Some(vec![f64::INFINITY, 1e6, f64::INFINITY]);
+        let wide = fit_one(&c, d, 100.0).unwrap();
+        assert_eq!((wide.status, wide.steps), (free.status, free.steps));
+        assert_eq!(wide.params, free.params);
+    }
+
+    #[test]
+    fn a_bounded_linear_parameter_is_held_at_its_bound() {
+        let c = compile("a*exp(-b*x) + c", &["x".into()], None).unwrap();
+        let mut d = exp_data(-2.0, 0.7, 0.3); // the true amplitude is negative
+        d.lower = Some(vec![0.0, f64::NEG_INFINITY, f64::NEG_INFINITY]);
+        d.upper = Some(vec![f64::INFINITY; 3]);
+        let o = fit_one(&c, d, 200.0).unwrap();
+        assert!(o.params[0].abs() < 1e-12 && o.params[0] >= 0.0, "{o:?}");
+    }
+
+    #[test]
+    fn bad_bounds_are_rejected() {
+        let c = compile("a*exp(-b*x) + c", &["x".into()], None).unwrap();
+        let mut d = exp_data(2.0, 0.7, 0.3);
+        d.lower = Some(vec![0.0; 2]);
+        assert!(fit_one(&c, d, 100.0).is_err());
+        let mut d = exp_data(2.0, 0.7, 0.3);
+        d.lower = Some(vec![1.0; 3]);
+        d.upper = Some(vec![0.0; 3]);
+        assert_eq!(fit_one(&c, d, 100.0).unwrap().status, "failure");
     }
 
     #[test]

@@ -179,3 +179,39 @@ def test_fit_many_trace_matches_fit():
         assert got.status == want.status == "max_steps" and got.steps == 4
         np.testing.assert_array_equal(got.trace, want.trace)
     assert sf.Pool(threads=1).fit_many(jobs, progress=False)[0].trace is None
+
+
+def test_bounds_keep_the_fit_inside_the_box_and_validate_names():
+    x, y = _exp_problem()
+    m = sf.compile("a*exp(-b*x) + c")
+    r = m.fit(x, y, p0=[1, 0.2, 0], bounds={"b": (None, 0.5)}, trace=True)  # the true b is 0.7
+    assert r["b"] == pytest.approx(0.5) and np.all(r.trace[:, m.params.index("b")] <= 0.5 + 1e-12)
+    with pytest.raises(ValueError, match="unknown"):
+        m.fit(x, y, bounds={"nope": (0, 1)})
+    # bounds that never bind change nothing
+    assert (
+        m.fit(x, y, p0=[1, 1, 0], bounds={"b": (-1e6, 1e6)}).steps
+        == m.fit(x, y, p0=[1, 1, 0]).steps
+    )
+
+
+def test_a_bounded_linear_parameter_is_held_at_its_bound():
+    x, y = _exp_problem()
+    m = sf.compile("a*exp(-b*x) + c")
+    r = m.fit(x, -y, bounds={"a": (0, None)})  # the true amplitude is negative: held at its bound
+    assert abs(r["a"]) < 1e-12
+    with pytest.raises(ValueError):
+        m.fit(x, y, bounds={"b": (1.0, 0.0)})
+
+
+def test_fit_many_takes_bounds_by_name():
+    x, y = _exp_problem()
+    expr = "a*exp(-b*x) + c"
+    jobs = [
+        (expr, x, -y),  # an expression: its parameters are found by name for the bounds
+        (sf.compile(expr), x, -y),
+        ("k*x", x, y),  # no parameter "a": an error for this job only
+    ]
+    r = sf.Pool(threads=2).fit_many(jobs, bounds={"a": (0, None)}, progress=False)
+    assert abs(r[0]["a"]) < 1e-12 and abs(r[1]["a"]) < 1e-12
+    assert r[2].status == "error" and "unknown parameters" in r[2].message
