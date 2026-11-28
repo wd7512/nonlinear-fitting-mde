@@ -1,0 +1,32 @@
+
+===== capped (p grid 0.4-4)
+-- prior: log-normal (method)
+   synthetic: RMSE 0.32, bias +0.03, coverage 90% 82% 95% 88%; split-half ICC 0.85, ICC(log p) 0.88, Spearman 0.84, within 0.5 97%
+   real 300 (G): split-half ICC 0.47, ICC(log p) 0.47, Spearman 0.45, within 0.5 78%; double-peaked (199) median min p 1.85 (95% CI 1.81-1.91); marginal log-lik -1167.7
+-- prior: gamma
+   synthetic: RMSE 0.32, bias +0.03, coverage 90% 82% 95% 90%; split-half ICC 0.85, ICC(log p) 0.88, Spearman 0.84, within 0.5 97%
+   real 300 (G): split-half ICC 0.47, ICC(log p) 0.48, Spearman 0.46, within 0.5 81%; double-peaked (199) median min p 1.81 (95% CI 1.76-1.85); marginal log-lik -1177.3
+-- prior: 2-component log-normal
+   synthetic: RMSE 0.33, bias +0.04, coverage 90% 83% 95% 90%; split-half ICC 0.85, ICC(log p) 0.88, Spearman 0.83, within 0.5 97%
+   real 300 (G): split-half ICC 0.45, ICC(log p) 0.46, Spearman 0.45, within 0.5 77%; double-peaked (199) median min p 1.82 (95% CI 1.77-1.88); marginal log-lik -1141.0
+-- prior: nonparametric, smoothed (check)
+   synthetic: RMSE 0.32, bias +0.03, coverage 90% 82% 95% 90%; split-half ICC 0.85, ICC(log p) 0.88, Spearman 0.84, within 0.5 97%
+   real 300 (G): split-half ICC 0.47, ICC(log p) 0.48, Spearman 0.46, within 0.5 81%; double-peaked (199) median min p 1.74 (95% CI 1.68-1.77); marginal log-lik -1152.8
+
+===== uncapped (p grid 0.4-16)
+-- prior: log-normal (method)
+   synthetic: RMSE 0.37, bias +0.02, coverage 90% 82% 95% 87%; split-half ICC -0.05, ICC(log p) 0.20, Spearman 0.71, within 0.5 92%
+   real 300 (G): split-half ICC 0.44, ICC(log p) 0.46, Spearman 0.44, within 0.5 68%; double-peaked (199) median min p 1.88 (95% CI 1.83-1.96); marginal log-lik -1521.4
+   largest synthetic split-half gaps (cell: even, odd, truth): 29: 0.57, 14.59, 0.70, 4: 2.78, 1.47, 1.39, 44: 2.18, 1.59, 2.00, 5: 2.09, 2.66, 2.82, 24: 1.55, 2.10, 1.96
+   ICC without those 3 cells: 0.83
+-- prior: gamma
+   synthetic: RMSE 0.37, bias +0.02, coverage 90% 85% 95% 85%; split-half ICC -0.05, ICC(log p) 0.20, Spearman 0.69, within 0.5 90%
+   real 300 (G): split-half ICC 0.45, ICC(log p) 0.46, Spearman 0.44, within 0.5 68%; double-peaked (199) median min p 1.91 (95% CI 1.85-1.98); marginal log-lik -1555.2
+-- prior: 2-component log-normal
+   synthetic: RMSE 0.57, bias +0.02, coverage 90% 73% 95% 85%; split-half ICC -0.07, ICC(log p) 0.14, Spearman 0.72, within 0.5 93%
+   real 300 (G): split-half ICC 0.27, ICC(log p) 0.35, Spearman 0.40, within 0.5 64%; double-peaked (199) median min p 1.89 (95% CI 1.83-1.99); marginal log-lik -1446.3
+-- prior: nonparametric, smoothed (check)
+   synthetic: RMSE 1.26, bias +0.03, coverage 90% 78% 95% 83%; split-half ICC -0.05, ICC(log p) 0.14, Spearman 0.71, within 0.5 95%
+   real 300 (G): split-half ICC 0.31, ICC(log p) 0.39, Spearman 0.42, within 0.5 65%; double-peaked (199) median min p 1.84 (95% CI 1.77-1.93); marginal log-lik -1444.0
+
+saved analysis/explore/eb_checks.npy

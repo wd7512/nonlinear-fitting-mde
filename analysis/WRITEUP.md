@@ -162,6 +162,23 @@ The notebooks clip p to [0.1, 4]. Every arm was rerun with no upper limit; the l
 
 So the cap changes least-squares answers a lot and empirical-Bayes answers hardly at all. Per-neuron least-squares p values are not meaningful without a cap, and with one they mostly reflect the cap. The population distribution from empirical Bayes is stable either way.
 
+### Checks on the empirical-Bayes layer (`eb_checks.py`, no new fits)
+
+- **Empirical Bayes as arm G of the 300-neuron table.** Its split-half agreement on real data is the best of any method. Run-to-run inconsistency is 0, because it is deterministic given the data.
+
+| | Split-half ICC of min p, capped | Same, uncapped | Within 0.5 between halves, capped / uncapped |
+|---|---|---|---|
+| A: Adam notebook | 0.37 | 0.39 | — |
+| E: bounds + 8 starts | 0.24 | 0.01 | — |
+| **G: empirical Bayes** | **0.47** | **0.44** | 78% / 68% |
+
+- **Prior family.** Log-normal, gamma, a two-component log-normal mixture and a smoothed nonparametric prior give the same synthetic recovery (capped RMSE 0.32–0.33). The real-data median min p of double-peaked cells moves within about 0.1:
+  - 1.74–1.85 capped; the smoothed nonparametric prior is the low end, and its CI does not overlap the log-normal's;
+  - 1.84–1.91 uncapped, where all CIs overlap.
+
+  The mixture fits the real data best by marginal likelihood (−1141 vs −1168 capped), a hint that the population of p is heavier-tailed or bimodal; check this on JR026. Uncapped, it recovers p worse on synthetic data (RMSE 0.57), so log-normal stays the default.
+- **The uncapped synthetic ICC of −0.05 is one cell.** On cell 29 the odd half's posterior mean is 14.6, against 0.57 for the even half and a truth of 0.70. Dropping the 3 largest gaps gives 0.83; Spearman is 0.71, and 92% of cells agree within 0.5.
+
 ## 6. Library features (PRs into `dev`)
 
 - [wd7512/symbfitrs#21](https://github.com/wd7512/symbfitrs/pull/21): active-set `bounds=` on `Model.fit` and `Pool.fit_many`.
