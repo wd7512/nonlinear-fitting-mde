@@ -209,7 +209,7 @@ uv run python -m bench.fetch stringer2019
 ```
 
 ```bash
-PYTHONPATH=analysis uv run python analysis/consistency.py C D E B A F boot_D boot_E boot_F
+PYTHONPATH=analysis uv run python analysis/consistency.py C D E B A F boot_D
 ```
 
 ```bash
