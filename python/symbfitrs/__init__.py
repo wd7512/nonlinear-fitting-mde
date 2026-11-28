@@ -9,7 +9,7 @@ results = symbfitrs.Pool(threads=8).fit_many([(expr_or_model, x, y), ...], budge
 from __future__ import annotations
 
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from importlib.metadata import version
 
@@ -89,6 +89,26 @@ def _args(variables, x, y, weights, p0):
     return xs, yb, w, None if p0 is None else [float(v) for v in p0]
 
 
+Bounds = Mapping[str, tuple[float | None, float | None]]
+
+
+def _bounds(params: Sequence[str], bounds: Bounds | None):
+    """{name: (lo, hi)} as (lower, upper) lists in `params` order; None = no bounds."""
+    if not bounds:
+        return None, None
+    unknown = [n for n in bounds if n not in params]
+    if unknown:
+        raise ValueError(f"bounds for unknown parameters {unknown}")
+    lo, hi = [], []
+    for n in params:
+        a, b = bounds.get(n, (None, None))
+        lo.append(-np.inf if a is None else float(a))
+        hi.append(np.inf if b is None else float(b))
+        if np.isnan(lo[-1]) or np.isnan(hi[-1]) or lo[-1] > hi[-1]:
+            raise ValueError(f"bounds for {n!r} must have lower <= upper")
+    return lo, hi
+
+
 def _result(raw) -> FitResult:
     (
         names,
@@ -157,13 +177,27 @@ class Model:
         budget_ms: float = 5.0,
         trace: bool = False,
         max_steps: int | None = None,
+        bounds: Bounds | None = None,
     ) -> FitResult:
         """Minimise Σ (w (f(x; θ) − y))² from `p0` (default: all ones) within `budget_ms`.
 
+        `bounds={name: (lo, hi)}` (None = unbounded on that side) keeps every iterate inside the
+        box: a parameter on a bound is held there while its gradient points out of the box, and
+        the start is first moved into the box. Use it instead of clipping inside the expression,
+        where the clipped region has zero gradient and a parameter that lands there cannot come
+        back. `lo == hi` fixes a parameter. Bounding a linear parameter turns variable projection
+        off.
+
         `trace=True` also returns θ at step 0 (the start) and after every accepted update;
         `max_steps` stops after that many accepted updates (status "max_steps")."""
+        lower, upper = _bounds(self.params, bounds)
         raw = self._core.fit(
-            *_args(self.variables, x, y, weights, p0), float(budget_ms), trace, max_steps
+            *_args(self.variables, x, y, weights, p0),
+            float(budget_ms),
+            trace,
+            max_steps,
+            lower,
+            upper,
         )
         return _result(raw)
 
@@ -197,25 +231,34 @@ class Pool:
         progress: bool = True,
         trace: bool = False,
         max_steps: int | None = None,
+        bounds: Bounds | None = None,
     ) -> list[FitResult]:
         """Each job is (model, x, y), (model, x, y, p0) or (model, x, y, p0, weights), where
         model is a compiled Model or an expression over `variables`. Results come back in job
         order; a job that cannot run gets status "error" instead of stopping the batch. Each
         job's budget starts when a thread picks it up. Repeated expressions are compiled once.
-        `trace` and `max_steps` apply to every job, as in `Model.fit`."""
+        `trace`, `max_steps` and `bounds` apply to every job, as in `Model.fit`; a job whose model
+        has no parameter named in `bounds` is an error."""
         variables = list(variables)
         raw, errors = [], {}
+        params_of: dict[tuple, list[str]] = {}
         for i, (model, x, y, *rest) in enumerate(jobs):
             p0, weights = (*rest, None, None)[:2]
             try:
                 if isinstance(model, Model):
-                    src, names = model._core, model.variables
+                    src, names, params = model._core, model.variables, model.params
                 else:
-                    src, names = model, variables
-                raw.append((src, names, *_args(names, x, y, weights, p0)))
+                    src, names, params = model, variables, None
+                    if bounds:  # bounds are by name, so the expression's parameters are needed here
+                        key = (model, tuple(variables))
+                        if key not in params_of:
+                            params_of[key] = compile(model, variables).params
+                        params = params_of[key]
+                lower, upper = _bounds(params, bounds) if bounds else (None, None)
+                raw.append((src, names, *_args(names, x, y, weights, p0), (lower, upper)))
             except ValueError as e:
                 errors[i] = str(e)
-                raw.append(("", variables, [], b"", None, None))  # placeholder, replaced below
+                raw.append(("", variables, [], b"", None, None, (None, None)))  # placeholder
         bar = None
         if progress:
             from tqdm.auto import tqdm
