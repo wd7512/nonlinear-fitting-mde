@@ -6,6 +6,10 @@ Paste into a notebook after the models / estimators cells (it needs `MODELS`, `P
     fit = recipe_fit                       # same signature and return value as the notebooks' fit
     params['Gen. Gaussian'] = fit('Gen. Gaussian', angles, R_train)
     p_lo, p_hi = bootstrap_p(angles, R_train, params['Gen. Gaussian'])   # 95% intervals of min(p)
+    eb = eb_exponents(angles, R_train, params['Gen. Gaussian'])          # empirical Bayes (preferred)
+    eb['min_p'], eb['lo95'], eb['hi95'], eb['population']              # per cell, and the population
+
+Set `P_CAP = np.inf` before fitting to remove the exponents' upper limit (the notebooks use 4).
 
 What it does differently from both notebooks:
 * the model has no clips: the same limits are bounds on the parameters (`bounds=`), so no
@@ -20,6 +24,7 @@ import torch
 import symbfitrs
 
 N_STARTS, BUDGET_MS, SEED = 8, 300.0, 0
+P_CAP = None          # None: the notebook's P_MAX; np.inf: no upper limit on p
 
 
 def _peak(offset, left, right, power):
@@ -39,8 +44,13 @@ def _model(name):
         expr = f'b + a1*{_peak(0, "l1", "r1", "p1")} + a2*{_peak("pi", "l2", "r2", "p2")}'
         bounds = {'b': (0, None), 'a1': (0, None), 'a2': (0, None),
                   **{k: (MIN_WIDTH, MAX_WIDTH) for k in ('l1', 'r1', 'l2', 'r2')},  # noqa: F821
-                  'p1': (P_MIN, P_MAX), 'p2': (P_MIN, P_MAX)}                         # noqa: F821
+                  'p1': (P_MIN, _p_hi()), 'p2': (P_MIN, _p_hi())}                     # noqa: F821
     return symbfitrs.compile(expr), names, bounds
+
+
+def _p_hi():
+    hi = P_MAX if P_CAP is None else P_CAP                                      # noqa: F821
+    return None if not np.isfinite(hi) else hi
 
 
 def _starts(p0, names, rng):
@@ -109,3 +119,65 @@ def bootstrap_p(angles, Y, P, n_boot=100, seed=1):
         pb = np.where(swap[:, None], pb[:, ::-1], pb)
         mins[b] = pb.min(1)
     return np.nanpercentile(mins, 2.5, 0), np.nanpercentile(mins, 97.5, 0)
+
+
+# ---------------------------------------------------------------- empirical Bayes for the exponents
+def eb_exponents(angles, Y, P, grid=None, starts=3, ms=30.0):
+    """Empirical-Bayes posterior of min(p1, p2) per cell, and the population distribution of p.
+
+    1. Noise per bin: each cell's squared residuals from its fit `P` (notebook order, e.g. from
+       `recipe_fit`) regressed on the fitted curve, var = c0 + c1 * f (works with one repeat).
+    2. Profile: (p1, p2) pinned on `grid` x `grid` (bounds lo = hi), everything else refitted
+       with residuals weighted by 1 / noise SD; rescaled so the best point's weighted MSE is the
+       expected (n - 10) / n.
+    3. Prior: log p ~ Normal(mu, sd), mu and sd by maximum marginal likelihood over all cells
+       (both peaks share it; nothing hand-set). Posterior per cell on a fine grid.
+    Returns min_p (posterior mean), lo95 / hi95 (2.5% / 97.5%; covered the truth in about 88% of
+    synthetic cells, so read them as roughly 90% intervals) and population (mu, sd, median p)."""
+    from scipy.interpolate import RectBivariateSpline
+    P = np.asarray(P.cpu() if hasattr(P, 'cpu') else P, np.float64)
+    hi = _p_hi()
+    grid = np.geomspace(0.4, 4.0 if hi is not None and hi <= 4 else 16.0, 13 if hi is not None and hi <= 4 else 17) \
+        if grid is None else np.asarray(grid, float)
+    model, names, bounds = _model('Gen. Gaussian')
+    order = [names.index(p) for p in model.params]
+    f, _ = MODELS['Gen. Gaussian']                                      # noqa: F821
+    with torch.no_grad():
+        fit = f(torch.as_tensor(angles, dtype=torch.float64), torch.as_tensor(P)).numpy()
+    ok = ~np.isnan(Y)
+    sd = np.empty_like(fit)
+    for i in range(len(Y)):
+        r2, fi = (Y[i] - fit[i])[ok[i]] ** 2, fit[i][ok[i]]
+        c, *_ = np.linalg.lstsq(np.stack([np.ones_like(fi), fi], 1), r2, rcond=None)
+        sd[i] = np.sqrt(np.clip(c[0] + c[1] * fit[i], 0.1 * r2.mean(), None))
+    rng = np.random.default_rng(SEED)
+    pool = symbfitrs.Pool()
+    n_bins = ok.sum(1)
+    L = np.full((len(Y), len(grid), len(grid)), -np.inf)
+    for a, pa in enumerate(grid):
+        for b, pb in enumerate(grid):
+            jobs = []
+            for i in range(len(Y)):
+                S = _starts(P[i], names, rng)[:starts].copy(); S[:, 8], S[:, 9] = pa, pb
+                jobs.append((model, angles[ok[i]], Y[i][ok[i]], S[:, order], 1 / sd[i][ok[i]]))
+            res = pool.fit_many(jobs, budget_ms=ms * starts, bounds=dict(bounds, p1=(pa, pa), p2=(pb, pb)), progress=False)
+            L[:, a, b] = [-n_bins[i] * r.loss / 2 if r.params.size else -np.inf for i, r in enumerate(res)]
+    best_mse = -2 * L.reshape(len(L), -1).max(1) / n_bins
+    L = L / (best_mse * n_bins / (n_bins - 10))[:, None, None]
+    fine = np.geomspace(grid[0], grid[-1], 81)
+    lg, lf = np.log(grid), np.log(fine)
+    Lf = np.stack([RectBivariateSpline(lg, lg, Li)(lf, lf) for Li in L])
+    lik = np.exp(Lf - Lf.max((1, 2), keepdims=True))
+    best = (-np.inf, None)
+    for mu in np.linspace(lf[0], lf[-1], 41):
+        for s in np.geomspace(0.05, 2.0, 30):
+            g = np.exp(-0.5 * ((lf - mu) / s) ** 2); g /= g.sum()
+            ll = np.log(np.einsum('iab,a,b->i', lik, g, g) + 1e-300).sum()
+            if ll > best[0]: best = (ll, (g, mu, s))
+    g, mu, s = best[1]
+    w = lik * g[None, :, None] * g[None, None, :]; w /= w.sum((1, 2), keepdims=True)
+    mn = np.minimum(fine[:, None], fine[None, :]).ravel(); o = np.argsort(mn, kind='stable'); vals = mn[o]
+    W = w.reshape(len(w), -1)[:, o]
+    cdf = np.cumsum(W, 1) - W / 2
+    lo = np.array([np.interp(0.025, c, vals) for c in cdf]); hi95 = np.array([np.interp(0.975, c, vals) for c in cdf])
+    return dict(min_p=W @ vals, lo95=lo, hi95=hi95, population=dict(mu=mu, sd=s, median_p=float(np.exp(mu))))
