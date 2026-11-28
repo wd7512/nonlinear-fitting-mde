@@ -5,6 +5,11 @@ not listed here.
 
 ## Unreleased
 
+- `p0` may be 2-D (one start per row) in `Model.fit` and `Pool.fit_many` jobs. Each start is
+  fitted in turn with an equal share of the budget left when it begins; the lowest loss is kept,
+  and the status, steps, history and trace are that start's. `FitResult.start_losses` and
+  `FitResult.start_params` report every start, which shows whether the fit has more than one
+  optimum. A 1-D `p0` behaves as before.
 - `Model.fit` and `Pool.fit_many` take `trace=True` and `max_steps=`. With `trace`, `FitResult.trace`
   holds the parameter vector (in `names` order) at step 0 (the start, with eliminated linear
   parameters already solved at it) and after every accepted update, shape `(steps + 1, n_params)`; rejected trials and residual or Jacobian evaluations do
