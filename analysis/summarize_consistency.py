@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import consistency as _c
 from consistency import TH, HALF, CELLS, P0, N, P_MIN, P_MAX, gen_gauss, OUT, SYNTH
 TRUTH = _c.TRUTH if SYNTH else None
-PNG = 'analysis/consistency_synth' if SYNTH else 'analysis/consistency'
+PNG = OUT        # figures sit beside the run's directory: analysis/consistency[_synth][_pinf].png
 
 LABEL = {'A': 'A  Adam notebook', 'B': 'B  our notebook (penalised, λ=1)', 'C': 'C  symbfitrs today (clipped)',
          'D': 'D  bounds', 'E': 'E  bounds + 8 starts', 'F': 'F  bounds + 8 starts + CV penalty'}
@@ -117,6 +117,8 @@ for a in arms:
         curve_vs_A_share_lt1=float(np.mean(s['curve_vs_A'] < 1)) if 'curve_vs_A' in s else None,
         p_vs_A_share_gt05=float(np.mean(s['p_vs_A'] > 0.5)) if 'p_vs_A' in s else None,
         at_pmax=float(np.mean((np.clip(Pe[:, 8:10], P_MIN, P_MAX) >= P_MAX - 1e-6).any(1))),
+        p_gt4=float(np.mean((Pe[:, 8:10] > 4.0 + 1e-6).any(1))), p_gt10=float(np.mean((Pe[:, 8:10] > 10.0).any(1))),
+        minp_gt4=float(np.mean(np.clip(Pe[:, 8:10], P_MIN, None).min(1) > 4.0 + 1e-6)),
         wide=float(np.mean((np.clip(Pe[:, 4:8], 0.1, 2 * np.pi) >= np.pi).any(1))),
         **({'lam': float(R[a]['lam'])} if a == 'F' else {}),
     ))
@@ -145,7 +147,8 @@ if SYNTH:
                          ('rmse_minp', 'bias_minp', 'within05', 'rmse_minp_double', 'repro_err', 'truth_median_double',
                           'pop_median_all_double', 'truth_median_repro', 'pop_median_repro')})
 for r in rows:
-    print(r['arm'], f"exponent at its upper bound {r['at_pmax']:.0%}, a flank wider than pi {r['wide']:.0%}")
+    print(r['arm'], f"exponent at its upper bound {r['at_pmax']:.0%}, any p > 4 {r['p_gt4']:.0%}, any p > 10 {r['p_gt10']:.0%}, "
+          f"min p > 4 {r['minp_gt4']:.0%}, a flank wider than pi {r['wide']:.0%}")
 for r in rows:
     print(r['arm'], 'dR2 CI', r['d_r2_ci'], 'pop median CI', r['pop_median_repro_ci'], 'curve<1 noise vs A', r['curve_vs_A_share_lt1'], r.get('lam', ''))
 json.dump(rows, open(f'{OUT}/summary.json', 'w'), indent=1)
@@ -200,7 +203,7 @@ ax.plot([0, 4], [0, 4], color='#666666', lw=1, ls='--'); ax.set_xlim(0, 4.1); ax
 ax.set_xlabel('min(p), even-half fit'); ax.set_ylabel('min(p), odd-half fit'); ax.legend(title='arm', frameon=False, fontsize=9)
 ax.set_title('Split-half min(p): Adam (A) vs bounds + starts (E)', fontsize=11, loc='left')
 caption(ax, 'Closer to the dashed diagonal is better: a point on it gets the same min(p) from both halves of the data.', y=-0.2)
-fig.suptitle(('SYNTHETIC (known p): ' if SYNTH else '') + 'Same 300 Stringer-2019 neurons, same halves: accuracy, optimum quality and self-consistency', fontsize=13, x=0.01, ha='left')
+fig.suptitle(('SYNTHETIC (known p): ' if SYNTH else '') + ('p uncapped. ' if _c.UNCAPPED else '') + 'Same 300 Stringer-2019 neurons, same halves: accuracy, optimum quality and self-consistency', fontsize=13, x=0.01, ha='left')
 fig.savefig(f'{PNG}.png', bbox_inches='tight')
 
 # example cells: the curves of A, B, C and E against the data, where A and E differ most and at the median

@@ -27,7 +27,16 @@ import symbfitrs
 from _neuro import ns, gen_gauss, estimator, EXPR, NAMES, MODEL, ORDER, INV, ROWS, trials, PENALISED_FIT_SRC
 
 torch.set_num_threads(4)
-OUT = 'analysis/consistency'
+# P_CAP=inf removes the exponents' upper limit (4 in the notebooks) in every arm: Adam's clamp, the
+# penalised and clipped expressions, and the bounds. The lower limit (0.1) and the widths stay.
+P_CAP = float(os.environ.get('P_CAP', '4'))
+UNCAPPED = not np.isfinite(P_CAP)
+if UNCAPPED:
+    ns['P_MAX'] = 1e6                                      # the parser has no inf; 1e6 never binds
+    EXPR = ns['_will_expression']('Gen. Gaussian')[0]     # clipped expression, p clipped below only (in effect)
+    MODEL = symbfitrs.compile(EXPR)
+    ORDER = [list(NAMES).index(p) for p in MODEL.params]; INV = np.argsort(ORDER)
+OUT = 'analysis/consistency_pinf' if UNCAPPED else 'analysis/consistency'
 os.makedirs(OUT, exist_ok=True)
 NUM_STEPS, LR, PATIENCE = ns['NUM_STEPS'], ns['LR'], ns['PATIENCE']
 P_MIN, P_MAX, MIN_W, MAX_W = ns['P_MIN'], ns['P_MAX'], ns['MIN_WIDTH'], ns['MAX_WIDTH']
@@ -41,7 +50,7 @@ if SYNTH:
     # Known truth: each neuron's arm-E fit on its even half (clipped into the model's ranges), with
     # both exponents redrawn uniformly in [0.7, 3]; trials = truth + Gaussian noise with that
     # neuron's per-bin trial SD (pooled over its 8 real trials). Same 4 trials per bin per half.
-    OUT = 'analysis/consistency_synth'
+    OUT = 'analysis/consistency_synth_pinf' if UNCAPPED else 'analysis/consistency_synth'
     os.makedirs(OUT, exist_ok=True)
     _rng = np.random.default_rng(2026)
     TRUTH = np.load('analysis/consistency/E.npz')['even'].copy()
@@ -95,14 +104,15 @@ def pmap(fn, items):
 _W = '6.283185307179586'
 _e = EXPR.replace(f'min(max(theta, 0), {_W})', 'theta')
 for n in ('l1', 'r1', 'l2', 'r2'): _e = _e.replace(f'min(max({n}, 0.1), {_W})', n)
-for n in ('p1', 'p2'): _e = _e.replace(f'min(max({n}, 0.1), 4.0)', n)
+for n in ('p1', 'p2'): _e = _e.replace(f'min(max({n}, 0.1), {P_MAX})', n)
 _i1, _i2 = _e.index(' + max(a1, 0)*'), _e.index(' + max(a2, 0)*')
 FREE_EXPR = f'b + a1*{_e[_i1 + len(" + max(a1, 0)*"):_i2]} + a2*{_e[_i2 + len(" + max(a2, 0)*"):]}'
 assert 'min(' not in FREE_EXPR and 'max(a1' not in FREE_EXPR and 'max(b' not in FREE_EXPR
 FREE = symbfitrs.compile(FREE_EXPR)
 F_ORDER = [list(NAMES).index(p) for p in FREE.params]; F_INV = np.argsort(F_ORDER)
 BOUNDS = {'b': (0, None), 'a1': (0, None), 'a2': (0, None),
-          **{k: (MIN_W, MAX_W) for k in ('l1', 'r1', 'l2', 'r2')}, 'p1': (P_MIN, P_MAX), 'p2': (P_MIN, P_MAX)}
+          **{k: (MIN_W, MAX_W) for k in ('l1', 'r1', 'l2', 'r2')},
+          'p1': (P_MIN, None if UNCAPPED else P_MAX), 'p2': (P_MIN, None if UNCAPPED else P_MAX)}
 
 # ---- penalised unclipped model: one extra data row per parameter, switched on by its indicator
 SCALES = ns['PENALTY_SCALES']
