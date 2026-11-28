@@ -20,7 +20,8 @@ def run(out):
     w = cell('jacob_tuning_will_fits', 'def _will_expression')
     ns.update(MIN_WIDTH=0.1, MAX_WIDTH=2 * np.pi, P_MIN=0.1, P_MAX=4.0)
     exec(w[w.index('def _will_expression'):w.index('def will_fit')], ns)
-    est_src = cell('jacob_tuning_fits', 'def parameter_estimator_bz15'); exec(est_src, ns)
+    est_src = cell('jacob_tuning_fits', 'def parameter_estimator_bz15')
+    exec(est_src.split('MODELS =')[0], ns)          # the estimators only (MODELS needs the torch models)
     expr, names = ns['_will_expression']('Gen. Gaussian')
     d = np.load('data/external/stringer2019/gratings.npz'); X, Y = d['x'], d['y']
     rows = np.array(json.load(open('analysis/robustness_300.json'))['rows'])
