@@ -29,7 +29,7 @@ Branch `claude/focused-hopper-o1g2wl`. Every number below comes from the scripts
 
 - **Removing the cap on p** makes least squares worse: p exceeds 10 in about 30% of neurons, split-half agreement collapses and held-out R² drops slightly. The cap of 4 was acting as a regulariser.
 
-UNCAPPED_EB_SUMMARY
+- **Empirical Bayes is robust to the cap.** Without it, the population median min p for double-peaked cells is 1.88 (95% CI 1.83–1.96), against 1.85 (1.81–1.91) with it. The scientific answer does not depend on the cap.
 
 ## 1. Why the notebooks' R² and curves differ
 
@@ -140,7 +140,27 @@ The notebooks clip p to [0.1, 4]. Every arm was rerun with no upper limit; the l
 - **The cap was acting as a regulariser.** The data do not identify p at its upper end. A per-neuron least-squares p is therefore only as meaningful as the cap chosen.
 - **Single-start uncapped fits can be worse than capped ones.** On one neuron, D settled at p1 = 5.3 with a higher loss than the capped optimum. Several starts mostly fix this: E reaches the best optimum in 81% of neurons.
 
-UNCAPPED_EB
+**Synthetic data, no cap (true p in 0.7–3), 60 neurons:**
+
+| Method | min p RMSE | Dominant-peak p RMSE | p > 4 in any peak |
+|---|---|---|---|
+| Estimator only | 0.56 | 0.45 | 18% |
+| Adam, early stop | 0.62 | 1.43 | 25% |
+| E: bounds + 8 starts | 0.66 | 5.79 | 0% at a cap (none set); runaway values instead |
+| Empirical Bayes, weighted, log-normal prior | 0.37 | — | — |
+
+- Uncapped least squares sends the dominant peak's p far above the truth: RMSE 5.8, against 0.70 with the cap.
+- min p still looks reasonable, because the weaker peak's p sets the minimum.
+
+**Empirical Bayes without the cap** uses a p grid of 0.4–16:
+- **Synthetic data:** RMSE 0.37 (0.32 with the cap) and bias +0.02. Nominal 90% / 95% intervals cover 82% / 87%, the same as capped. 92% of cells agree between halves within 0.5.
+  - Its split-half ICC is −0.05, against 0.85 capped. A variance-based ICC is dominated by a few cells with extreme posteriors once p may reach 16, so the |diff| share is the more robust measure here.
+- **Real data, 300 neurons:**
+  - Each peak's population median p is 2.31 (80% of neurons in 1.23–4.34), against 2.38 with the cap.
+  - Double-peaked cells (199): median posterior min p is **1.88 (95% CI 1.83–1.96)**, against 1.85 (1.81–1.91) with the cap.
+  - Per neuron: median 95% width 1.86, split-half ICC 0.44, and the halves' intervals overlap in 99% of neurons.
+
+So the cap changes least-squares answers a lot and empirical-Bayes answers hardly at all. Per-neuron least-squares p values are not meaningful without a cap, and with one they mostly reflect the cap. The population distribution from empirical Bayes is stable either way.
 
 ## 6. Library features (PRs into `dev`)
 
@@ -163,7 +183,7 @@ The gate could not run, because its tier files need full local benchmark runs. I
 
 1. **Fit with bounds and several starts**, not with clips inside the model or early stopping. R² is the same, the answer is reproducible, and it takes seconds on a CPU.
 2. **Report p as an empirical-Bayes posterior** with its 95% interval, together with the population distribution. This replaces the ±0.5 reproducibility filter. `recipe_tuning_fit.py` is a drop-in `fit()` for the notebooks.
-3. **Choose the exponent cap and the minimum width deliberately**, and report them: both change the answer (see section 5).
+3. **Do not rely on per-neuron least-squares p.** With the cap it mostly reflects the cap; without it, p runs away. If a cap is kept, choose it and the minimum width deliberately and report them. The empirical-Bayes population result barely changes with or without the cap (section 5).
 4. **Run the comparison on JR026 itself.** The notebooks' data have 256 bins and one repeat per half, so the per-neuron intervals will differ.
 
 ## 8. Caveats
@@ -189,7 +209,7 @@ uv run python -m bench.fetch stringer2019
 ```
 
 ```bash
-PYTHONPATH=analysis uv run python analysis/consistency.py C D E B A F boot_D
+PYTHONPATH=analysis uv run python analysis/consistency.py C D E B A F boot_D boot_E boot_F
 ```
 
 ```bash
