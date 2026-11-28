@@ -5,10 +5,12 @@ import numpy as np
 import torch
 import symbfitrs
 
-UP = glob.glob('/root/.claude/uploads/*/')[0]
-# the two notebooks as uploaded (newest upload of each name wins); cells are found by content,
-# not by position, so an edit to a notebook does not silently shift what is executed
-_nb = lambda name: json.load(open(sorted(glob.glob(UP + f'*-{name}.ipynb'), key=lambda f: __import__('os').path.getmtime(f))[-1]))
+import os
+# the two notebooks, committed on the analysis branch in analysis/notebooks/ (as uploaded);
+# cells are found by content, not by position, so an edit to a notebook does not silently shift
+# what is executed
+NB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'notebooks')
+_nb = lambda name: json.load(open(os.path.join(NB_DIR, f'{name}.ipynb')))
 _adam, _will = _nb('jacob_tuning_fits'), _nb('jacob_tuning_will_fits')
 def cell(nb, needle):
     hits = [''.join(c['source']) for c in nb['cells'] if c['cell_type'] == 'code' and needle in ''.join(c['source'])]

@@ -4,24 +4,17 @@ import glob, json, sys, time
 import numpy as np
 import torch
 
-UP = glob.glob('/root/.claude/uploads/*/')[0]
-REPO = '/home/user/symbfitrs'
+REPO = __import__('os').path.dirname(__import__('os').path.dirname(__import__('os').path.abspath(__file__)))  # the repo root
 CELL = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] else None
 OUT = sys.argv[2] if len(sys.argv) > 2 else '.'
 DEVICE = 'cpu'
 torch.set_num_threads(4)
 
 # ---- pull the model, estimator and symbfitrs expression straight from the notebooks --------
-adam_nb = json.load(open(UP + '9d73f0a9-jacob_tuning_fits.ipynb'))
-will_nb = json.load(open(UP + '06379ac6-jacob_tuning_will_fits.ipynb'))
-src = lambda nb, i: ''.join(nb['cells'][i]['source'])
-ns = {'np': np, 'torch': torch}
-exec(src(adam_nb, 17), ns)   # peak, gauss, gen_gauss, clips
-exec(src(adam_nb, 18), ns)   # estimators, MODELS
-will = src(will_nb, 22)
-start = will.index('def _will_expression'); end = will.index('def will_fit')
-exec(will[start:end], ns)    # _will_expression
-exec(src(adam_nb, 20).split('def mse')[0], ns)  # NUM_STEPS, LR, PATIENCE, SEED
+# the model, estimator and expression come from the committed notebooks via _neuro (by content);
+# this script was first run against an earlier upload of the same notebooks
+sys.path.insert(0, __import__('os').path.dirname(__import__('os').path.abspath(__file__)))
+from _neuro import ns
 gen_gauss, estimator = ns['gen_gauss'], ns['parameter_estimator_bz15']
 NUM_STEPS, LR, PATIENCE, SEED = ns['NUM_STEPS'], ns['LR'], ns['PATIENCE'], ns['SEED']
 

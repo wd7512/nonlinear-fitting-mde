@@ -12,16 +12,12 @@ import symbfitrs
 
 N_CELLS, OUT = int(sys.argv[1]), sys.argv[2]
 SPLIT_SEEDS = [int(s) for s in sys.argv[3].split(',')] if len(sys.argv) > 3 else [7]
-UP = glob.glob('/root/.claude/uploads/*/')[0]
 torch.set_num_threads(4)
 
-adam_nb = json.load(open(UP + '9d73f0a9-jacob_tuning_fits.ipynb'))
-will_nb = json.load(open(UP + '06379ac6-jacob_tuning_will_fits.ipynb'))
-src = lambda nb, i: ''.join(nb['cells'][i]['source'])
-ns = {'np': np, 'torch': torch}
-exec(src(adam_nb, 17), ns); exec(src(adam_nb, 18), ns)
-w = src(will_nb, 22); exec(w[w.index('def _will_expression'):w.index('def will_fit')], ns)
-exec(src(adam_nb, 20).split('def mse')[0], ns)
+# the model, estimator and expression come from the committed notebooks via _neuro (by content);
+# this script was first run against an earlier upload of the same notebooks
+sys.path.insert(0, __import__('os').path.dirname(__import__('os').path.abspath(__file__)))
+from _neuro import ns
 gen_gauss, estimator = ns['gen_gauss'], ns['parameter_estimator_bz15']
 NUM_STEPS, LR, PATIENCE = ns['NUM_STEPS'], ns['LR'], ns['PATIENCE']
 BUDGET_MS = 1000.0
