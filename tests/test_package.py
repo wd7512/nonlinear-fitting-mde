@@ -179,3 +179,30 @@ def test_fit_many_trace_matches_fit():
         assert got.status == want.status == "max_steps" and got.steps == 4
         np.testing.assert_array_equal(got.trace, want.trace)
     assert sf.Pool(threads=1).fit_many(jobs, progress=False)[0].trace is None
+
+
+def test_profile_minimum_matches_the_free_fit():
+    x, y = _exp_problem()
+    m = sf.compile("a*exp(-b*x) + c")
+    free = m.fit(x, y, p0=[1, 1, 0])
+    grid = np.linspace(free["b"] - 0.2, free["b"] + 0.2, 41)  # contains the free fit's b
+    prof = m.profile(x, y, fix={"b": grid}, p0=[1, 1, 0], budget_ms=50)
+    assert prof.loss.shape == (41,) and prof.params.shape == (41, 3) and prof.fixed == ("b",)
+    k = int(np.nanargmin(prof.loss))
+    assert abs(grid[k] - free["b"]) <= 0.01 + 1e-12
+    assert np.all(prof.loss >= free.loss - 1e-12)  # fixing a parameter cannot beat the free fit
+    np.testing.assert_allclose(prof.params[:, m.params.index("b")], grid)
+    assert prof.best()["b"] == grid[k]
+
+
+def test_profile_two_parameters_and_bad_names():
+    m = sf.compile("a*exp(-b*x) + c*x")
+    x = np.linspace(0, 4, 60)
+    y = 2.0 * np.exp(-0.7 * x) + 0.3 * x
+    prof = m.profile(x, y, fix={"b": [0.5, 0.7, 0.9], "c": [0.1, 0.3]}, p0=[1, 1, 1])
+    assert prof.loss.shape == (3, 2)
+    assert np.unravel_index(np.nanargmin(prof.loss), (3, 2)) == (1, 1)
+    with pytest.raises(ValueError):
+        m.profile(x, y, fix={"nope": [1.0]})
+    with pytest.raises(ValueError):
+        m.profile(x, y, fix={})
